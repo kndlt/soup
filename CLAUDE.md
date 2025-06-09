@@ -9,4 +9,5 @@
 - Suggest better approaches when it makes sense — don’t just follow orders.
 - Keep it simple. Avoid unnecessary complexity.
 - After creating a file, prompt the user to press “Keep” before continuing.
+- When in doubt, search online. If a command fails, best course of the action probably is to search with the error message.
 - Be concise.
