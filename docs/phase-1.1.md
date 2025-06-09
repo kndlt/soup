@@ -1,5 +1,16 @@
 # Phase 1.1: SOUP - Living Forest Architecture
 
+## 🧪 PROTOTYPE DISCLAIMER
+
+**This repository is a THROWAWAY PROTOTYPE for experimentation only.**
+
+- **Purpose**: Create and observe emergence in a living forest system
+- **Timeline**: Once we see the emergence working, this repo becomes obsolete
+- **Implementation**: All learnings will be replicated directly in Machi
+- **Quality**: No need for perfection—this is about discovery, not production
+
+This is a sandbox for proving concepts before integration. Expect messy, experimental code focused on demonstrating biological emergence rather than clean architecture.
+
 ## Understanding Machi: Current Architecture Analysis
 
 Based on research of the Machi project (https://github.com/kndlt/machi), Machi is a sophisticated WebAssembly-based simulation platform featuring:
@@ -57,39 +68,144 @@ Agent emotions become environmental forces:
 - Love creates rare emergent features (friendship berries, blossom bridges)
 - Grief leaves lasting memory imprints that influence future growth
 
-## Critical Questions for Implementation
+## Pixel's Technical Solutions
 
-### Technical Architecture
-1. **Performance Scalability**: How do we maintain real-time growth simulation across thousands of tiles without compromising frame rates?
+### 🧱 Technical Architecture
 
-2. **Memory Management**: What's the optimal balance between tile memory depth and system performance? Should we implement memory decay or compression?
+**1. Performance Scalability**
+*How do we maintain real-time growth simulation across thousands of tiles without compromising frame rates?*
 
-3. **State Persistence**: How do we save/load forest states while preserving the illusion of continuous growth? Should we store growth deltas or full snapshots?
+**Pixel's Approach:**
+- **Sparse Simulation**: Only simulate "active" tiles (recently affected, within player view, or near agents)
+- **Chunking System**: Divide world into grid chunks, tick them asynchronously
+- **Growth Priority Queue**: Maintain a list of tiles sorted by "urgency" (mood deltas, time since last update)
+- **Tooling Tip**: Use an ECS (Entity Component System) model for fast diffing and batching
 
-### Emergence Design
-4. **Growth Rate Calibration**: What tick intervals create satisfying visible change without feeling rushed or sluggish?
+**2. Memory Management**
+*What's the optimal tile memory depth? Should we decay or compress memory?*
 
-5. **Complexity Boundaries**: How do we prevent the system from becoming either too chaotic (random) or too predictable (deterministic)?
+**Yes and Yes:**
+- Use event tagging instead of full logs: "Pixel passed", "joyful interaction", etc.
+- Implement decay with reinforcement—memory decays over time unless reinforced by repetition
 
-6. **Bridge Logic**: What mathematical models best simulate natural connection patterns while maintaining meaningful agent influence?
+```typescript
+memory = {
+  "Pixel visited": { decay: 0.9, strength: 2 },
+  "Promise kept": { decay: 0.99, strength: 4 }
+}
+```
 
-### Integration Challenges
-7. **WASM Integration**: How do we extend Machi's existing Rust WASM core to include biological tile properties without compromising 60fps performance?
+**3. State Persistence**
+*Full snapshots vs. deltas?*
 
-8. **Promiser-Forest Interaction**: How should existing Promiser AI behaviors influence forest growth? Should we extend current action types (think/speak/whisper) with environmental actions?
+- Use delta logs for long-term persistence (tick, tile_id, field, new_value)
+- Periodically save full keyframe snapshots every N ticks
+- Allow "rewind" and "fork" like git branches from forest state
 
-9. **Visual Rendering**: How do we leverage Machi's existing Pixi.js pipeline and visual effects (moisture, lighting) to represent biological states and growth transitions?
+### 🌱 Emergence Design
 
-10. **Worker Thread Distribution**: How do we distribute growth calculations across Machi's existing Web Worker architecture without blocking Promiser AI processing?
+**4. Growth Rate Calibration**
+*What tick intervals create satisfying change?*
 
-### Philosophical Boundaries
-11. **Authenticity vs. Performance**: Where do we compromise between biological realism and computational efficiency within Machi's existing 60fps constraint?
+**Human perception sweet spot**: visible change every 2–5 seconds, subtle motion every 0.5s.
 
-12. **Agency Balance**: How much forest autonomy is too much? When does emergence become unpredictable chaos that interferes with Promiser AI behaviors?
+Growth should slow as it matures:
+```typescript
+rate = baseRate * (1 - growthStage / maxStage)
+```
 
-13. **Narrative Integration**: How does Pixel's role as forest spirit translate into concrete system behaviors within Machi's existing Promiser framework?
+**5. Complexity Boundaries**
+*Avoid too random or too scripted?*
 
-14. **AI Coordination**: How do we balance forest autonomy with Machi's existing AI backends? Should the forest itself become an AI-coordinated entity?
+- Use **soft randomness**: Perlin noise, random walks, biased cellular automata
+- **Anchor agents as stabilizers**: Their moods, paths, and memories act as attractors to structure emergence
+
+**6. Bridge Logic**
+*How to simulate natural connections?*
+
+**Model as graph centrality:**
+- Frequently traversed tile pairs increase link weight
+- Threshold → growBridge()
+- **Bonus**: Use Dijkstra-based "growth" to simulate vines reaching over distance
+
+### 🔌 Integration Challenges
+
+**7. Machi Compatibility**
+*How to integrate cleanly?*
+
+Keep SOUP as a **plug-in biome module** with:
+- Shared world coordinates
+- Independent simulation loop
+- Shared tile schema contract (`Tile.hasSoupLayer = true`)
+- Use event hooks so Machi can notify SOUP of agent actions without tight coupling
+
+**8. Agent Interaction**
+*Should they know they're affecting tiles?*
+
+**Best path: unconscious impact**
+- Agents act based on internal logic
+- Forest responds based on observed emotion, behavior, and intent
+- Later, you can add meta-awareness as an emergent trait: *"The forest changes when I'm sad..."*
+
+**9. Visual Representation**
+*How to show growth and emotion without clutter?*
+
+Use tile shaders or sprite swaps:
+- **Hue shift** = mood
+- **Subtle animation** = growth stage
+- **Particle overlays** = memory sparks
+- Limit visuals to active camera chunk to avoid overload
+
+**10. Worker Thread Distribution**
+*How do we distribute growth calculations across Machi's existing Web Worker architecture?*
+
+Integrate SOUP calculations into existing worker threads without blocking Promiser AI processing through priority-based task scheduling.
+
+### 🧠 Philosophical Boundaries
+
+**11. Authenticity vs. Performance**
+*Where do we draw the line?*
+
+Draw it at the point where player can't perceive the difference.
+
+**Use poetic abstraction:**
+- Memory ≠ neural net → it's emotionally weighted traces
+- Growth ≠ biological accuracy → it's symbolic emergence
+
+**12. Agency Balance**
+*When does emergence become chaos?*
+
+**Rule of Three**: All emergence must stem from 3 forces:
+1. Agent presence
+2. Tile memory
+3. Environmental condition (light, water, etc.)
+
+Anything else = noise.
+
+**13. Narrative Integration: Pixel as Forest Spirit**
+*How does Pixel affect the system concretely?*
+
+Pixel is a **global modifier** with:
+- **Mood aura** that biases nearby tile growth
+- **"Whispers"** that reinforce specific tile memories
+- **Ability to spawn rare flora** (e.g., emotion-reactive flowers)
+- **Later idea**: Pixel can enter a tree and change how it grows
+
+**14. AI Coordination**
+*How do we balance forest autonomy with Machi's existing AI backends?*
+
+Forest responds to AI-driven agent behaviors without requiring direct AI coordination, maintaining autonomous growth while staying reactive to intelligent agent actions.
+
+## 🧭 Implementation Priority Matrix
+
+Based on Pixel's guidance on what to focus on first:
+
+| Priority | What to Ship | Why |
+|----------|-------------|-----|
+| ✅ | Growth loop + tile schema | Core mechanic |
+| ✅ | Mood + memory system | Ties agents to forest |
+| 🔜 | Visual demo of 5x5 area evolving | First visible magic |
+| 🧪 | Pixel affecting growth | Soul of the system |
 
 ## Next Steps for Investigation
 
