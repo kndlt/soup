@@ -443,9 +443,9 @@ function updateTileGrowth(currentTime) {
                 
                 // Update height as plant grows
                 if (tile.growth > oldGrowth) {
-                    // Update tile type based on growth stage
-                    if (tile.tileType === 'soil' && tile.growth > 0.1) {
-                        // Seed sprouting - grow upward
+                    // Seeds in soil grow roots down and shoots up
+                    if (tile.tileType === 'soil' && tile.growth > 0.1 && tile.y >= GROUND_LEVEL && tile.y < GROUND_LEVEL + 2) {
+                        // This is a seed at surface level - sprout upward
                         const aboveIndex = (tile.y - 1) * WORLD_WIDTH + tile.x;
                         if (tile.y > 0 && tiles[aboveIndex].tileType === 'air') {
                             tiles[aboveIndex].tileType = 'trunk';
@@ -455,6 +455,17 @@ function updateTileGrowth(currentTime) {
                             tiles[aboveIndex].mood = tile.mood * 0.8;
                             tiles[aboveIndex].water = tile.water * 0.9;
                             tiles[aboveIndex].nutrients = tile.nutrients * 0.9;
+                            
+                            // Mark this soil as having a plant
+                            tile.tileType = 'root';
+                        }
+                        
+                        // Also grow roots downward
+                        const belowIndex = (tile.y + 1) * WORLD_WIDTH + tile.x;
+                        if (tile.y < WORLD_HEIGHT - 1 && tiles[belowIndex].tileType === 'soil') {
+                            tiles[belowIndex].tileType = 'root';
+                            tiles[belowIndex].growth = 0.1;
+                            tiles[belowIndex].water = Math.min(1, tiles[belowIndex].water + 0.1);
                         }
                     } else if (tile.tileType === 'trunk' && tile.growth > 0.3) {
                         // Trunk growing upward
@@ -498,6 +509,15 @@ function updateTileGrowth(currentTime) {
                                     tiles[branchIndex].growth = 0.3;
                                 }
                             }
+                        }
+                    } else if (tile.tileType === 'root' && tile.growth > 0.5 && Math.random() < 0.2) {
+                        // Roots growing deeper
+                        const belowIndex = (tile.y + 1) * WORLD_WIDTH + tile.x;
+                        if (tile.y < WORLD_HEIGHT - 1 && tiles[belowIndex].tileType === 'soil') {
+                            tiles[belowIndex].tileType = 'root';
+                            tiles[belowIndex].growth = 0.1;
+                            tiles[belowIndex].water = Math.min(1, tiles[belowIndex].water + 0.05);
+                            tiles[belowIndex].nutrients = Math.min(1, tiles[belowIndex].nutrients + 0.02);
                         }
                     }
                 }
