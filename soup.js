@@ -247,15 +247,23 @@ function updateAgents(deltaTime) {
         // Get tiles around agent
         let onSolid = false;
         let onClimbable = false;
+        let inClimbable = false;
         
+        // Check current tile (for climbing detection)
+        if (tileY >= 0 && tileY < WORLD_HEIGHT && tileX >= 0 && tileX < WORLD_WIDTH) {
+            const currentTile = tiles[tileY * WORLD_WIDTH + tileX];
+            inClimbable = currentTile.climbable;
+        }
+        
+        // Check tile below (for ground detection)
         if (tileBelowY < WORLD_HEIGHT && tileX >= 0 && tileX < WORLD_WIDTH) {
             const tileBelow = tiles[tileBelowY * WORLD_WIDTH + tileX];
             onSolid = tileBelow.solid;
             onClimbable = tileBelow.climbable;
         }
         
-        agent.grounded = onSolid && agent.vy >= 0;
-        agent.climbing = onClimbable && !agent.grounded;
+        agent.grounded = onSolid && agent.vy >= 0 && !onClimbable && !inClimbable;
+        agent.climbing = onClimbable || inClimbable;
         
         // Horizontal movement (random walk)
         if (agent.grounded || agent.climbing) {
@@ -269,14 +277,23 @@ function updateAgents(deltaTime) {
         if (!agent.climbing) {
             agent.vy += gravity * deltaTime;
         } else {
-            // Climbing movement
-            agent.vy = (Math.random() - 0.5) * 0.5;
+            // When stuck in a tree trunk, jump upward strongly
+            agent.vy = -1.5; // Strong upward boost
+            // Also allow horizontal movement while climbing
+            agent.vx += (Math.random() - 0.5) * walkSpeed * 0.5;
         }
         
         // Jump behavior
         if (agent.grounded && Math.random() < 0.02) {
             agent.vy = jumpForce;
             agent.grounded = false;
+        }
+        
+        // Climbing agents can also jump off
+        if (agent.climbing && Math.random() < 0.01) {
+            agent.vy = jumpForce * 0.7; // Smaller jump from climbing
+            agent.vx += (Math.random() - 0.5) * 1.0; // Random horizontal push
+            agent.climbing = false;
         }
         
         // Apply friction
@@ -301,7 +318,7 @@ function updateAgents(deltaTime) {
             if (checkY >= 0 && checkY < WORLD_HEIGHT) {
                 const newTileIndex = checkY * WORLD_WIDTH + Math.floor(newX);
                 const newTile = tiles[newTileIndex];
-                if (!newTile.solid || agent.climbing) {
+                if (!newTile.solid || (newTile.solid && newTile.climbable)) {
                     agent.x = newX;
                 } else {
                     agent.vx = 0;
@@ -319,7 +336,7 @@ function updateAgents(deltaTime) {
             if (checkX >= 0 && checkX < WORLD_WIDTH) {
                 const newTileIndex = Math.floor(newY) * WORLD_WIDTH + checkX;
                 const newTile = tiles[newTileIndex];
-                if (!newTile.solid || newTile.climbable) {
+                if (!newTile.solid || (newTile.solid && newTile.climbable)) {
                     agent.y = newY;
                 } else {
                     // Hit solid tile
@@ -455,6 +472,8 @@ function updateTileGrowth(currentTime) {
                             tiles[aboveIndex].mood = tile.mood * 0.8;
                             tiles[aboveIndex].water = tile.water * 0.9;
                             tiles[aboveIndex].nutrients = tile.nutrients * 0.9;
+                            tiles[aboveIndex].light = tile.light * 0.95;
+                            tiles[aboveIndex].visits = tile.visits; // Inherit parent's visits
                             
                             // Mark this soil as having a plant
                             tile.tileType = 'root';
@@ -471,10 +490,31 @@ function updateTileGrowth(currentTime) {
                         // Trunk growing upward
                         const aboveIndex = (tile.y - 1) * WORLD_WIDTH + tile.x;
                         if (tile.y > 0 && tiles[aboveIndex].tileType === 'air') {
-                            if (tile.y < GROUND_LEVEL - 4 || tile.growth > 1.2) {
+                            // Growth-based height with resource modifiers
+                            const resourceQuality = (tile.water + tile.nutrients + tile.light) / 3;
+                            const heightAboveGround = GROUND_LEVEL - tile.y;
+                            const maxHeight = 5 + Math.floor(resourceQuality * 10); // 5-15 tiles based on resources
+                            
+                            if (heightAboveGround < maxHeight && tile.growth > 0.5) {
+                                // Continue trunk growth
+                                tiles[aboveIndex].tileType = 'trunk';
+                                tiles[aboveIndex].solid = true;
+                                tiles[aboveIndex].climbable = true;
+                                tiles[aboveIndex].growth = 0.1;
+                                tiles[aboveIndex].mood = tile.mood * 0.9;
+                                tiles[aboveIndex].water = tile.water * 0.85;
+                                tiles[aboveIndex].nutrients = tile.nutrients * 0.85;
+                                tiles[aboveIndex].light = tile.light * 0.95;
+                                tiles[aboveIndex].visits = Math.max(1, tile.visits);
+                            } else if (tile.growth > 1.0 || heightAboveGround >= maxHeight) {
                                 // Top of tree - add leaves
                                 tiles[aboveIndex].tileType = 'leaf';
                                 tiles[aboveIndex].growth = 0.3;
+                                tiles[aboveIndex].water = tile.water * 0.8;
+                                tiles[aboveIndex].nutrients = tile.nutrients * 0.8;
+                                tiles[aboveIndex].light = 1.0; // Leaves get full light at top
+                                tiles[aboveIndex].mood = tile.mood * 0.9;
+                                tiles[aboveIndex].visits = tile.visits;
                                 
                                 // Also add side leaves
                                 const leftIndex = tile.y * WORLD_WIDTH + (tile.x - 1);
@@ -482,10 +522,20 @@ function updateTileGrowth(currentTime) {
                                 if (tile.x > 0 && tiles[leftIndex].tileType === 'air') {
                                     tiles[leftIndex].tileType = 'leaf';
                                     tiles[leftIndex].growth = 0.2;
+                                    tiles[leftIndex].water = tile.water * 0.7;
+                                    tiles[leftIndex].nutrients = tile.nutrients * 0.7;
+                                    tiles[leftIndex].light = 0.9;
+                                    tiles[leftIndex].mood = tile.mood * 0.8;
+                                    tiles[leftIndex].visits = tile.visits;
                                 }
                                 if (tile.x < WORLD_WIDTH - 1 && tiles[rightIndex].tileType === 'air') {
                                     tiles[rightIndex].tileType = 'leaf';
                                     tiles[rightIndex].growth = 0.2;
+                                    tiles[rightIndex].water = tile.water * 0.7;
+                                    tiles[rightIndex].nutrients = tile.nutrients * 0.7;
+                                    tiles[rightIndex].light = 0.9;
+                                    tiles[rightIndex].mood = tile.mood * 0.8;
+                                    tiles[rightIndex].visits = tile.visits;
                                 }
                             } else {
                                 // Continue trunk growth
@@ -494,11 +544,18 @@ function updateTileGrowth(currentTime) {
                                 tiles[aboveIndex].climbable = true;
                                 tiles[aboveIndex].growth = 0.1;
                                 tiles[aboveIndex].mood = tile.mood * 0.9;
+                                tiles[aboveIndex].water = tile.water * 0.85;
+                                tiles[aboveIndex].nutrients = tile.nutrients * 0.85;
+                                tiles[aboveIndex].light = tile.light * 0.95;
+                                tiles[aboveIndex].visits = tile.visits; // Inherit parent's visits
                             }
                         }
                         
-                        // Occasionally spawn branches
-                        if (tile.y < GROUND_LEVEL - 2 && Math.random() < 0.1) {
+                        // Branch probability increases with height
+                        const heightAboveGround = GROUND_LEVEL - tile.y;
+                        const branchChance = 0.05 + Math.min(heightAboveGround / 20, 0.15) * 0.15;
+                        
+                        if (tile.y < GROUND_LEVEL - 2 && Math.random() < branchChance) {
                             const branchSide = Math.random() < 0.5 ? -1 : 1;
                             const branchIndex = tile.y * WORLD_WIDTH + (tile.x + branchSide);
                             if ((branchSide === -1 && tile.x > 0) || (branchSide === 1 && tile.x < WORLD_WIDTH - 1)) {
@@ -507,6 +564,11 @@ function updateTileGrowth(currentTime) {
                                     tiles[branchIndex].solid = true;
                                     tiles[branchIndex].climbable = true;
                                     tiles[branchIndex].growth = 0.3;
+                                    tiles[branchIndex].water = tile.water * 0.7;
+                                    tiles[branchIndex].nutrients = tile.nutrients * 0.7;
+                                    tiles[branchIndex].light = tile.light * 0.9;
+                                    tiles[branchIndex].mood = tile.mood * 0.8;
+                                    tiles[branchIndex].visits = tile.visits;
                                 }
                             }
                         }
