@@ -377,18 +377,26 @@ function updateTileInfluence() {
                         tile.currentInfluence += influence;
                         tile.visits++;
                         
-                        // Joyful agents on branches can drop seeds
-                        if (agent.emotion > 0 && agent.grounded && distance === 0) {
+                        // Joyful agents can drop seeds on soil
+                        if (agent.emotion > 0 && distance === 0) {
                             const currentTile = tiles[tileIndex];
-                            if (currentTile.tileType === 'branch' && Math.random() < 0.01) {
-                                // Find ground below to plant seed
-                                for (let checkY = y + 1; checkY < WORLD_HEIGHT; checkY++) {
-                                    const groundIndex = checkY * WORLD_WIDTH + x;
-                                    const groundTile = tiles[groundIndex];
-                                    if (groundTile.tileType === 'soil' && groundTile.growth === 0) {
-                                        groundTile.growth = 0.1; // Seed planted!
-                                        console.log(`🌱 Seed planted at (${x}, ${checkY})`);
-                                        break;
+                            // Plant seeds on soil or when on branches
+                            if ((currentTile.tileType === 'soil' || currentTile.tileType === 'branch') && 
+                                currentTile.growth < 0.1 && Math.random() < 0.05) {
+                                if (currentTile.tileType === 'soil') {
+                                    // Direct planting
+                                    currentTile.growth = 0.1;
+                                    console.log(`🌱 Seed planted at (${x}, ${y})`);
+                                } else {
+                                    // Drop from branch
+                                    for (let checkY = y + 1; checkY < WORLD_HEIGHT; checkY++) {
+                                        const groundIndex = checkY * WORLD_WIDTH + x;
+                                        const groundTile = tiles[groundIndex];
+                                        if (groundTile.tileType === 'soil' && groundTile.growth === 0) {
+                                            groundTile.growth = 0.1;
+                                            console.log(`🌱 Seed dropped to (${x}, ${checkY})`);
+                                            break;
+                                        }
                                     }
                                 }
                             }
@@ -409,7 +417,7 @@ function updateTileInfluence() {
 
 // Update tile growth and spreading
 function updateTileGrowth(currentTime) {
-    const growthInterval = 400; // milliseconds between growth updates (increased for performance)
+    const growthInterval = 100; // milliseconds between growth updates (faster for visible growth)
     
     for (let i = 0; i < tiles.length; i++) {
         const tile = tiles[i];
@@ -419,15 +427,15 @@ function updateTileGrowth(currentTime) {
             tile.lastUpdate = currentTime;
             
             // Resource-driven growth conditions (Phase 2.4)
-            const hasWater = tile.water > 0.3;
-            const hasNutrients = tile.nutrients > 0.2;
+            const hasWater = tile.water > 0.2;
+            const hasNutrients = tile.nutrients > 0.1;
             const hasLight = tile.light > 0.1;
-            const hasMood = tile.mood > 0.1;
+            const hasMood = tile.mood > 0.05;
             
-            if (hasWater && hasNutrients && hasLight && hasMood && tile.visits > 1) {
+            if (hasWater && hasNutrients && hasLight && hasMood && tile.visits > 0) {
                 // Calculate growth rate based on resources
                 const resourceFactor = Math.min(tile.water, tile.nutrients, tile.light);
-                const growthRate = 0.02 * resourceFactor * (1 - tile.growth / 2); // slower as it matures
+                const growthRate = 0.1 * resourceFactor; // Much faster growth
                 
                 // Update type and height
                 const oldGrowth = tile.growth;
@@ -437,15 +445,59 @@ function updateTileGrowth(currentTime) {
                 if (tile.growth > oldGrowth) {
                     // Update tile type based on growth stage
                     if (tile.tileType === 'soil' && tile.growth > 0.1) {
-                        tile.tileType = 'trunk';
-                        tile.solid = true;
-                        tile.climbable = true;
-                    } else if (tile.tileType === 'trunk' && tile.growth > 1.5) {
-                        // Spawn leaves above
+                        // Seed sprouting - grow upward
                         const aboveIndex = (tile.y - 1) * WORLD_WIDTH + tile.x;
                         if (tile.y > 0 && tiles[aboveIndex].tileType === 'air') {
-                            tiles[aboveIndex].tileType = 'leaf';
-                            tiles[aboveIndex].growth = 0.5;
+                            tiles[aboveIndex].tileType = 'trunk';
+                            tiles[aboveIndex].solid = true;
+                            tiles[aboveIndex].climbable = true;
+                            tiles[aboveIndex].growth = 0.1;
+                            tiles[aboveIndex].mood = tile.mood * 0.8;
+                            tiles[aboveIndex].water = tile.water * 0.9;
+                            tiles[aboveIndex].nutrients = tile.nutrients * 0.9;
+                        }
+                    } else if (tile.tileType === 'trunk' && tile.growth > 0.3) {
+                        // Trunk growing upward
+                        const aboveIndex = (tile.y - 1) * WORLD_WIDTH + tile.x;
+                        if (tile.y > 0 && tiles[aboveIndex].tileType === 'air') {
+                            if (tile.y < GROUND_LEVEL - 4 || tile.growth > 1.2) {
+                                // Top of tree - add leaves
+                                tiles[aboveIndex].tileType = 'leaf';
+                                tiles[aboveIndex].growth = 0.3;
+                                
+                                // Also add side leaves
+                                const leftIndex = tile.y * WORLD_WIDTH + (tile.x - 1);
+                                const rightIndex = tile.y * WORLD_WIDTH + (tile.x + 1);
+                                if (tile.x > 0 && tiles[leftIndex].tileType === 'air') {
+                                    tiles[leftIndex].tileType = 'leaf';
+                                    tiles[leftIndex].growth = 0.2;
+                                }
+                                if (tile.x < WORLD_WIDTH - 1 && tiles[rightIndex].tileType === 'air') {
+                                    tiles[rightIndex].tileType = 'leaf';
+                                    tiles[rightIndex].growth = 0.2;
+                                }
+                            } else {
+                                // Continue trunk growth
+                                tiles[aboveIndex].tileType = 'trunk';
+                                tiles[aboveIndex].solid = true;
+                                tiles[aboveIndex].climbable = true;
+                                tiles[aboveIndex].growth = 0.1;
+                                tiles[aboveIndex].mood = tile.mood * 0.9;
+                            }
+                        }
+                        
+                        // Occasionally spawn branches
+                        if (tile.y < GROUND_LEVEL - 2 && Math.random() < 0.1) {
+                            const branchSide = Math.random() < 0.5 ? -1 : 1;
+                            const branchIndex = tile.y * WORLD_WIDTH + (tile.x + branchSide);
+                            if ((branchSide === -1 && tile.x > 0) || (branchSide === 1 && tile.x < WORLD_WIDTH - 1)) {
+                                if (tiles[branchIndex].tileType === 'air') {
+                                    tiles[branchIndex].tileType = 'branch';
+                                    tiles[branchIndex].solid = true;
+                                    tiles[branchIndex].climbable = true;
+                                    tiles[branchIndex].growth = 0.3;
+                                }
+                            }
                         }
                     }
                 }
