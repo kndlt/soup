@@ -2,9 +2,11 @@
 // Quick & dirty emergence experiment
 
 // Global configuration
-const WORLD_SIZE = 32; // Scaled up from 8x8 to 32x32
-const TILE_COUNT = WORLD_SIZE * WORLD_SIZE; // 1024 tiles
+const WORLD_WIDTH = 64; // Wider world for side-view
+const WORLD_HEIGHT = 32; // Height represents vertical space
+const TILE_COUNT = WORLD_WIDTH * WORLD_HEIGHT; // 2048 tiles
 const INITIAL_AGENT_COUNT = 12; // More agents for larger world
+const GROUND_LEVEL = 24; // Ground starts at y=24
 
 // Global state
 let tiles = [];
@@ -75,11 +77,13 @@ function setupEventListeners() {
             x: x,
             y: y,
             vx: (Math.random() - 0.5) * 2,
-            vy: (Math.random() - 0.5) * 2,
+            vy: 0,
             emotion: Math.random() > 0.5 ? 1 : -1,
             id: agents.length,
             energy: 1.0,
-            age: 0
+            age: 0,
+            grounded: false,
+            climbing: false
         };
         
         agents.push(newAgent);
@@ -87,13 +91,13 @@ function setupEventListeners() {
         
         // Debug tile at click position
         if (debugMode) {
-            const tileIndex = y * WORLD_SIZE + x;
+            const tileIndex = y * WORLD_WIDTH + x;
             if (tileIndex >= 0 && tileIndex < tiles.length) {
                 const tile = tiles[tileIndex];
                 console.log(`Tile (${x},${y}):`, {
                     mood: tile.mood,
                     visits: tile.visits,
-                    type: tile.type,
+                    growth: tile.growth,
                     influence: tile.currentInfluence
                 });
             }
@@ -127,22 +131,35 @@ function setupEventListeners() {
 function createTiles() {
     tiles = [];
     
-    for (let y = 0; y < WORLD_SIZE; y++) {
-        for (let x = 0; x < WORLD_SIZE; x++) {
+    for (let y = 0; y < WORLD_HEIGHT; y++) {
+        for (let x = 0; x < WORLD_WIDTH; x++) {
+            // Determine initial tile type based on position
+            let tileType = 'air';
+            let solid = false;
+            let climbable = false;
+            
+            // Ground level and below is soil
+            if (y >= GROUND_LEVEL) {
+                tileType = 'soil';
+                solid = true;
+            }
+            
             tiles.push({
                 x: x,
                 y: y,
-                mood: 0,              // -1 (decay) to 1 (flourish)
-                visits: 0,            // agent visit count
-                type: 0,              // 0=soil, 1=growing, 2=mature
-                lastUpdate: 0,        // for growth timing
-                currentInfluence: 0,  // this frame's influence
+                tileType: tileType,       // 'air', 'soil', 'root', 'trunk', 'branch', 'leaf'
+                solid: solid,             // Can agents stand on it?
+                climbable: climbable,     // Can agents climb it?
+                mood: 0,                  // -1 (decay) to 1 (flourish)
+                visits: 0,                // agent visit count
+                growth: 0,                // 0=empty, 0-1=growing, 1+=mature
+                lastUpdate: 0,            // for growth timing
+                currentInfluence: 0,      // this frame's influence
                 
                 // Biological parameters (Phase 2.4)
-                water: 0.3 + Math.random() * 0.3,      // Moisture content (0.3-0.6)
-                nutrients: 0.2 + Math.random() * 0.4,   // Soil nutrients (0.2-0.6)
-                light: 1.0,                             // Light availability (starts full)
-                height_from_ground: 0,                  // For growth bias
+                water: y >= GROUND_LEVEL ? 0.3 + Math.random() * 0.3 : 0,  // Moisture in soil
+                nutrients: y >= GROUND_LEVEL ? 0.2 + Math.random() * 0.4 : 0, // Nutrients in soil
+                light: y < GROUND_LEVEL ? 1.0 : 0.1,  // Light above ground
                 
                 // Fire/clearing mechanics
                 fire_risk: 0,
@@ -158,14 +175,16 @@ function createAgents() {
     
     for (let i = 0; i < INITIAL_AGENT_COUNT; i++) {
         agents.push({
-            x: Math.random() * WORLD_SIZE,
-            y: Math.random() * WORLD_SIZE,
+            x: Math.random() * WORLD_WIDTH,
+            y: Math.random() * (GROUND_LEVEL - 5), // Spawn above ground
             vx: (Math.random() - 0.5) * 2,  // velocity -1 to 1
-            vy: (Math.random() - 0.5) * 2,
+            vy: 0, // Start with no vertical velocity
             emotion: Math.random() > 0.5 ? 1 : -1,  // joy or sorrow
             id: i,
             energy: 1.0,
-            age: 0
+            age: 0,
+            grounded: false, // Track if on solid ground
+            climbing: false  // Track if climbing
         });
     }
 }
@@ -210,62 +229,118 @@ function update(deltaTime) {
     updateStatistics();
 }
 
-// Update agent movement with gravity
+// Update agent movement with platformer physics
 function updateAgents(deltaTime) {
-    const speed = 0.004; // pixels per millisecond (scaled for 32x32)
-    const gravity = 0.0008; // downward acceleration
-    const friction = 0.98; // air resistance
+    const speed = 0.003; // pixels per millisecond
+    const gravity = 0.0015; // downward acceleration
+    const jumpForce = -2.5; // upward jump velocity
+    const walkSpeed = 0.02; // horizontal movement
     
     for (let i = 0; i < agents.length; i++) {
         const agent = agents[i];
         
-        // Random walk with reduced strength
-        agent.vx += (Math.random() - 0.5) * 0.04;
-        agent.vy += (Math.random() - 0.5) * 0.04;
+        // Check what tile agent is on
+        const tileX = Math.floor(agent.x);
+        const tileY = Math.floor(agent.y);
+        const tileBelowY = Math.floor(agent.y + 0.5);
         
-        // Apply gravity
-        agent.vy += gravity * deltaTime;
+        // Get tiles around agent
+        let onSolid = false;
+        let onClimbable = false;
+        
+        if (tileBelowY < WORLD_HEIGHT && tileX >= 0 && tileX < WORLD_WIDTH) {
+            const tileBelow = tiles[tileBelowY * WORLD_WIDTH + tileX];
+            onSolid = tileBelow.solid;
+            onClimbable = tileBelow.climbable;
+        }
+        
+        agent.grounded = onSolid && agent.vy >= 0;
+        agent.climbing = onClimbable && !agent.grounded;
+        
+        // Horizontal movement (random walk)
+        if (agent.grounded || agent.climbing) {
+            agent.vx += (Math.random() - 0.5) * walkSpeed;
+        } else {
+            // Less control in air
+            agent.vx += (Math.random() - 0.5) * walkSpeed * 0.3;
+        }
+        
+        // Apply gravity (unless climbing)
+        if (!agent.climbing) {
+            agent.vy += gravity * deltaTime;
+        } else {
+            // Climbing movement
+            agent.vy = (Math.random() - 0.5) * 0.5;
+        }
+        
+        // Jump behavior
+        if (agent.grounded && Math.random() < 0.02) {
+            agent.vy = jumpForce;
+            agent.grounded = false;
+        }
         
         // Apply friction
-        agent.vx *= friction;
-        agent.vy *= friction;
+        agent.vx *= agent.grounded ? 0.85 : 0.98;
+        if (!agent.climbing) {
+            agent.vy *= 0.99;
+        }
         
         // Clamp velocity
-        const maxSpeed = 2.0; // Increased for larger world
-        agent.vx = Math.max(-maxSpeed, Math.min(maxSpeed, agent.vx));
-        agent.vy = Math.max(-maxSpeed, Math.min(maxSpeed, agent.vy));
+        const maxSpeedX = 1.5;
+        const maxSpeedY = 3.0;
+        agent.vx = Math.max(-maxSpeedX, Math.min(maxSpeedX, agent.vx));
+        agent.vy = Math.max(-maxSpeedY, Math.min(maxSpeedY, agent.vy));
         
-        // Move
-        agent.x += agent.vx * speed * deltaTime;
-        agent.y += agent.vy * speed * deltaTime;
+        // Move with collision detection
+        const newX = agent.x + agent.vx * speed * deltaTime;
+        const newY = agent.y + agent.vy * speed * deltaTime;
         
-        // Bounce off walls
-        if (agent.x < 0 || agent.x >= WORLD_SIZE) {
-            agent.vx *= -0.8; // slight energy loss on bounce
-            agent.x = Math.max(0, Math.min(WORLD_SIZE - 1, agent.x));
-        }
-        
-        // Ground collision (bounce)
-        if (agent.y >= WORLD_SIZE - 0.1) {
-            agent.vy *= -0.7; // energy loss on ground bounce
-            agent.y = WORLD_SIZE - 0.1;
-            
-            // Small chance to jump when on ground
-            if (Math.random() < 0.01) {
-                agent.vy = -1.2; // jump force (scaled for larger world)
+        // Check horizontal collision
+        if (newX >= 0 && newX < WORLD_WIDTH) {
+            const checkY = Math.floor(agent.y);
+            if (checkY >= 0 && checkY < WORLD_HEIGHT) {
+                const newTileIndex = checkY * WORLD_WIDTH + Math.floor(newX);
+                const newTile = tiles[newTileIndex];
+                if (!newTile.solid || agent.climbing) {
+                    agent.x = newX;
+                } else {
+                    agent.vx = 0;
+                }
             }
+        } else {
+            // Wall bounce
+            agent.vx *= -0.5;
+            agent.x = Math.max(0, Math.min(WORLD_WIDTH - 0.1, agent.x));
         }
         
-        // Ceiling collision
-        if (agent.y < 0) {
-            agent.vy *= -0.5;
-            agent.y = 0;
+        // Check vertical collision
+        if (newY >= 0 && newY < WORLD_HEIGHT) {
+            const checkX = Math.floor(agent.x);
+            if (checkX >= 0 && checkX < WORLD_WIDTH) {
+                const newTileIndex = Math.floor(newY) * WORLD_WIDTH + checkX;
+                const newTile = tiles[newTileIndex];
+                if (!newTile.solid || newTile.climbable) {
+                    agent.y = newY;
+                } else {
+                    // Hit solid tile
+                    if (agent.vy > 0) {
+                        // Landing
+                        agent.y = Math.floor(newY);
+                        agent.grounded = true;
+                    }
+                    agent.vy = 0;
+                }
+            }
+        } else {
+            // Ceiling/floor collision
+            agent.vy = 0;
+            agent.y = Math.max(0, Math.min(WORLD_HEIGHT - 0.1, agent.y));
         }
         
         // Age the agent
         agent.age += deltaTime;
         
-        // Occasionally change emotion (adds dynamism)
+        // Occasionally change emotion
         if (Math.random() < 0.001) {
             agent.emotion *= -1;
             console.log(`🎭 Agent ${agent.id} changed emotion to ${agent.emotion > 0 ? 'joy' : 'sorrow'}`);
@@ -290,8 +365,8 @@ function updateTileInfluence() {
         // Check tiles in radius (brute force)
         for (let y = agentY - influenceRadius; y <= agentY + influenceRadius; y++) {
             for (let x = agentX - influenceRadius; x <= agentX + influenceRadius; x++) {
-                if (x >= 0 && x < WORLD_SIZE && y >= 0 && y < WORLD_SIZE) {
-                    const tileIndex = y * WORLD_SIZE + x;
+                if (x >= 0 && x < WORLD_WIDTH && y >= 0 && y < WORLD_HEIGHT) {
+                    const tileIndex = y * WORLD_WIDTH + x;
                     const tile = tiles[tileIndex];
                     
                     // Manhattan distance
@@ -301,6 +376,23 @@ function updateTileInfluence() {
                         const influence = agent.emotion * (1 - distance / influenceRadius) * 0.5;
                         tile.currentInfluence += influence;
                         tile.visits++;
+                        
+                        // Joyful agents on branches can drop seeds
+                        if (agent.emotion > 0 && agent.grounded && distance === 0) {
+                            const currentTile = tiles[tileIndex];
+                            if (currentTile.tileType === 'branch' && Math.random() < 0.01) {
+                                // Find ground below to plant seed
+                                for (let checkY = y + 1; checkY < WORLD_HEIGHT; checkY++) {
+                                    const groundIndex = checkY * WORLD_WIDTH + x;
+                                    const groundTile = tiles[groundIndex];
+                                    if (groundTile.tileType === 'soil' && groundTile.growth === 0) {
+                                        groundTile.growth = 0.1; // Seed planted!
+                                        console.log(`🌱 Seed planted at (${x}, ${checkY})`);
+                                        break;
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -335,15 +427,27 @@ function updateTileGrowth(currentTime) {
             if (hasWater && hasNutrients && hasLight && hasMood && tile.visits > 1) {
                 // Calculate growth rate based on resources
                 const resourceFactor = Math.min(tile.water, tile.nutrients, tile.light);
-                const growthRate = 0.02 * resourceFactor * (1 - tile.type / 2); // slower as it matures
+                const growthRate = 0.02 * resourceFactor * (1 - tile.growth / 2); // slower as it matures
                 
                 // Update type and height
-                const oldType = tile.type;
-                tile.type = Math.min(tile.type + growthRate, 2);
+                const oldGrowth = tile.growth;
+                tile.growth = Math.min(tile.growth + growthRate, 2);
                 
                 // Update height as plant grows
-                if (tile.type > oldType) {
-                    tile.height_from_ground = Math.floor(tile.type * 10);
+                if (tile.growth > oldGrowth) {
+                    // Update tile type based on growth stage
+                    if (tile.tileType === 'soil' && tile.growth > 0.1) {
+                        tile.tileType = 'trunk';
+                        tile.solid = true;
+                        tile.climbable = true;
+                    } else if (tile.tileType === 'trunk' && tile.growth > 1.5) {
+                        // Spawn leaves above
+                        const aboveIndex = (tile.y - 1) * WORLD_WIDTH + tile.x;
+                        if (tile.y > 0 && tiles[aboveIndex].tileType === 'air') {
+                            tiles[aboveIndex].tileType = 'leaf';
+                            tiles[aboveIndex].growth = 0.5;
+                        }
+                    }
                 }
                 
                 // Consume resources
@@ -351,7 +455,7 @@ function updateTileGrowth(currentTime) {
                 tile.nutrients -= 0.003;
                 
                 // Spread influence to neighbors
-                if (tile.type > 0.5) {
+                if (tile.growth > 0.5 && (tile.tileType === 'trunk' || tile.tileType === 'leaf')) {
                     spreadToNeighbors(tile);
                 }
             }
@@ -362,7 +466,7 @@ function updateTileGrowth(currentTime) {
             // Slow decay if no recent influence
             if (tile.currentInfluence === 0) {
                 tile.mood *= 0.9995; // very slow decay
-                tile.type *= 0.9998; // even slower type decay
+                tile.growth *= 0.9998; // even slower growth decay
             }
         }
     }
@@ -373,16 +477,17 @@ function spreadToNeighbors(sourceTile) {
     const spreadRadius = 1; // Reduced for performance on larger grid
     const spreadAmount = 0.02; // Increased to compensate for smaller radius
     
-    // Height-based growth bias (Phase 2.4 - Pixel's insight)
-    const horizontalBias = sourceTile.height_from_ground * 0.1;
+    // Height-based growth bias for canopy spreading
+    const isCanopy = sourceTile.tileType === 'leaf' || sourceTile.tileType === 'branch';
+    const horizontalBias = isCanopy ? 0.3 : 0;
     
     for (let dy = -spreadRadius; dy <= spreadRadius; dy++) {
         for (let dx = -spreadRadius; dx <= spreadRadius; dx++) {
             const nx = sourceTile.x + dx;
             const ny = sourceTile.y + dy;
             
-            if (nx >= 0 && nx < WORLD_SIZE && ny >= 0 && ny < WORLD_SIZE) {
-                const neighborIndex = ny * WORLD_SIZE + nx;
+            if (nx >= 0 && nx < WORLD_WIDTH && ny >= 0 && ny < WORLD_HEIGHT) {
+                const neighborIndex = ny * WORLD_WIDTH + nx;
                 const neighbor = tiles[neighborIndex];
                 
                 // Distance-based spreading
@@ -397,7 +502,7 @@ function spreadToNeighbors(sourceTile) {
                     neighbor.mood = Math.max(-1, Math.min(1, neighbor.mood));
                     
                     // Also spread some nutrients (leaf litter from mature trees)
-                    if (sourceTile.type > 1.5) {
+                    if (sourceTile.growth > 1.5 && sourceTile.tileType === 'leaf') {
                         neighbor.nutrients += 0.001;
                         neighbor.nutrients = Math.min(1, neighbor.nutrients);
                     }
@@ -419,15 +524,16 @@ function updateTileLight(tile, tileIndex) {
             const nx = tile.x + dx;
             const ny = tile.y + dy;
             
-            if (nx >= 0 && nx < WORLD_SIZE && ny >= 0 && ny < WORLD_SIZE) {
-                const neighborIndex = ny * WORLD_SIZE + nx;
+            if (nx >= 0 && nx < WORLD_WIDTH && ny >= 0 && ny < WORLD_HEIGHT) {
+                const neighborIndex = ny * WORLD_WIDTH + nx;
                 const neighbor = tiles[neighborIndex];
                 
-                // Taller, mature plants cast shade
-                if (neighbor.type > 1 && neighbor.height_from_ground > tile.height_from_ground) {
+                // Mature plants cast shade from above
+                if (neighbor.growth > 1 && neighbor.y < tile.y && 
+                    (neighbor.tileType === 'leaf' || neighbor.tileType === 'branch')) {
                     const distance = Math.sqrt(dx * dx + dy * dy);
-                    const shadeFactor = (1 - distance / checkRadius) * (neighbor.type / 2);
-                    tile.light -= shadeFactor * 0.2;
+                    const shadeFactor = (1 - distance / checkRadius) * neighbor.growth;
+                    tile.light -= shadeFactor * 0.3;
                 }
             }
         }
@@ -479,7 +585,7 @@ function updateFireRisk() {
         const tile = tiles[i];
         
         // Fire risk increases with negative mood and mature vegetation
-        if (tile.mood < -0.7 && tile.type > 1) {
+        if (tile.mood < -0.7 && tile.growth > 1) {
             tile.fire_risk += 0.01;
             
             // Trigger clearing event
@@ -496,8 +602,9 @@ function updateFireRisk() {
 // Clear a tile and spread clearing to neighbors
 function clearTile(tile, tileIndex) {
     // Reset tile to cleared state
-    tile.type = 0;
-    tile.height_from_ground = 0;
+    tile.growth = 0;
+    tile.tileType = 'soil';
+    tile.solid = true; // Back to solid soil
     tile.fire_risk = 0;
     tile.mood = 0.1; // Slight positive mood for regrowth
     tile.recovery_time = 100;
@@ -510,7 +617,7 @@ function clearTile(tile, tileIndex) {
     const neighbors = getNeighborIndices(tile.x, tile.y);
     for (let ni of neighbors) {
         const neighbor = tiles[ni];
-        if (neighbor.type > 1 && Math.random() < 0.3) {
+        if (neighbor.growth > 1 && (neighbor.tileType === 'trunk' || neighbor.tileType === 'leaf') && Math.random() < 0.3) {
             clearTile(neighbor, ni);
         }
     }
@@ -526,8 +633,8 @@ function getNeighborIndices(x, y) {
             if (dx === 0 && dy === 0) continue;
             const nx = x + dx;
             const ny = y + dy;
-            if (nx >= 0 && nx < WORLD_SIZE && ny >= 0 && ny < WORLD_SIZE) {
-                indices.push(ny * WORLD_SIZE + nx);
+            if (nx >= 0 && nx < WORLD_WIDTH && ny >= 0 && ny < WORLD_HEIGHT) {
+                indices.push(ny * WORLD_WIDTH + nx);
             }
         }
     }
@@ -544,7 +651,7 @@ function updateStatistics() {
         const tile = tiles[i];
         totalMood += tile.mood;
         totalVisits += tile.visits;
-        if (tile.type > 1.5) matureCount++;
+        if (tile.growth > 1.5) matureCount++;
     }
     
     stats.avgMood = totalMood / TILE_COUNT;
@@ -554,85 +661,96 @@ function updateStatistics() {
 
 // Render the world
 function render() {
-    const SCALE = 16; // Scale factor to make 32x32 grid visible (512/32 = 16)
+    const SCALE_X = 8; // 512 / 64 = 8 pixels per tile width
+    const SCALE_Y = 16; // 512 / 32 = 16 pixels per tile height
     
-    // Clear canvas
-    ctx.fillStyle = '#000';
+    // Clear canvas with sky gradient
+    const gradient = ctx.createLinearGradient(0, 0, 0, 512);
+    gradient.addColorStop(0, '#87CEEB'); // Sky blue at top
+    gradient.addColorStop(0.7, '#E0F6FF'); // Lighter blue
+    gradient.addColorStop(1, '#FFF4E6'); // Warm horizon
+    ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, 512, 512);
     
-    renderTiles(SCALE);
-    renderAgents(SCALE);
+    renderTiles(SCALE_X, SCALE_Y);
+    renderAgents(SCALE_X, SCALE_Y);
     
     if (debugMode) {
-        renderDebugInfo(SCALE);
+        renderDebugInfo(SCALE_X, SCALE_Y);
     }
 }
 
 // Render all tiles
-function renderTiles(scale) {
+function renderTiles(scaleX, scaleY) {
     for (let i = 0; i < tiles.length; i++) {
         const tile = tiles[i];
         const color = getTileColor(tile);
         
         ctx.fillStyle = color;
-        ctx.fillRect(tile.x * scale, tile.y * scale, scale, scale);
+        ctx.fillRect(tile.x * scaleX, tile.y * scaleY, scaleX, scaleY);
         
         // Draw grid lines in debug mode
         if (debugMode) {
             ctx.strokeStyle = '#333';
-            ctx.strokeRect(tile.x * scale, tile.y * scale, scale, scale);
+            ctx.strokeRect(tile.x * scaleX, tile.y * scaleY, scaleX, scaleY);
         }
     }
 }
 
 // Get color for a tile based on its state
 function getTileColor(tile) {
-    // Base color influenced by type and mood
-    const growthIntensity = tile.type * 100;
-    const moodInfluence = tile.mood * 50;
-    
-    // Fire risk shows as orange/red tinge
-    if (tile.fire_risk > 0.05) {
-        const fireIntensity = tile.fire_risk * 255;
-        return `rgb(${Math.min(255, 100 + fireIntensity)}, ${Math.min(255, 50 + growthIntensity)}, 0)`;
+    // Color based on tile type
+    switch(tile.tileType) {
+        case 'air':
+            return 'transparent'; // Sky shows through
+            
+        case 'soil':
+            // Soil color varies by depth and nutrients
+            const depth = (tile.y - GROUND_LEVEL) / (WORLD_HEIGHT - GROUND_LEVEL);
+            const soilBase = 40 + tile.nutrients * 40 - depth * 20;
+            return `rgb(${soilBase}, ${soilBase * 0.7}, ${soilBase * 0.5})`;
+            
+        case 'root':
+            // Roots are darker brown
+            return `rgb(${60 + tile.mood * 20}, ${40 + tile.mood * 10}, 20)`;
+            
+        case 'trunk':
+            // Tree trunk browns
+            const trunkBase = 80 + tile.growth * 40;
+            return `rgb(${trunkBase}, ${trunkBase * 0.6}, ${trunkBase * 0.3})`;
+            
+        case 'branch':
+            // Branches slightly lighter than trunk
+            const branchBase = 100 + tile.growth * 30;
+            return `rgb(${branchBase}, ${branchBase * 0.7}, ${branchBase * 0.4})`;
+            
+        case 'leaf':
+            // Leaves are green, affected by mood and resources
+            const resourceHealth = Math.min(tile.water, tile.nutrients, tile.light);
+            const greenIntensity = Math.min(255, 100 + tile.mood * 80 + resourceHealth * 75);
+            const redComponent = Math.max(0, 30 - tile.growth * 20);
+            return `rgb(${redComponent}, ${greenIntensity}, 20)`;
+            
+        default:
+            return '#FF00FF'; // Magenta for errors
     }
-    
-    // Water-stressed plants show brown
-    if (tile.type > 0 && tile.water < 0.2) {
-        const brownIntensity = growthIntensity * 0.6;
-        return `rgb(${brownIntensity}, ${brownIntensity * 0.7}, ${brownIntensity * 0.3})`;
-    }
-    
-    // Healthy growth is green, intensity based on maturity and resources
-    if (tile.type > 0) {
-        const resourceHealth = Math.min(tile.water, tile.nutrients, tile.light);
-        const greenIntensity = Math.min(255, growthIntensity + moodInfluence + resourceHealth * 50);
-        const redComponent = Math.max(0, 20 - tile.type * 10); // Less red as it matures
-        const blueComponent = Math.max(0, 10 + tile.height_from_ground * 2); // Slight blue for tall plants
-        
-        return `rgb(${redComponent}, ${greenIntensity}, ${blueComponent})`;
-    }
-    
-    // Bare soil color varies by nutrient content
-    const soilBase = 20 + tile.nutrients * 30;
-    return `rgb(${soilBase}, ${soilBase * 0.8}, ${soilBase * 0.6})`;
 }
 
 // Render all agents
-function renderAgents(scale) {
+function renderAgents(scaleX, scaleY) {
     for (let i = 0; i < agents.length; i++) {
         const agent = agents[i];
         
         // Agent position in pixels
-        const x = agent.x * scale;
-        const y = agent.y * scale;
+        const x = agent.x * scaleX;
+        const y = agent.y * scaleY;
         
         // Agent color based on emotion
         ctx.fillStyle = agent.emotion > 0 ? '#ffff00' : '#ff00ff'; // yellow joy, magenta sorrow
         
         // Draw agent as a circle
         ctx.beginPath();
-        ctx.arc(x, y, scale * 0.3, 0, Math.PI * 2);
+        ctx.arc(x, y, scaleX * 0.4, 0, Math.PI * 2);
         ctx.fill();
         
         // Draw velocity vector in debug mode
@@ -640,30 +758,30 @@ function renderAgents(scale) {
             ctx.strokeStyle = agent.emotion > 0 ? '#ffff00' : '#ff00ff';
             ctx.beginPath();
             ctx.moveTo(x, y);
-            ctx.lineTo(x + agent.vx * scale * 10, y + agent.vy * scale * 10);
+            ctx.lineTo(x + agent.vx * scaleX * 10, y + agent.vy * scaleY * 10);
             ctx.stroke();
             
             // Draw influence radius
             ctx.strokeStyle = agent.emotion > 0 ? '#ffff0033' : '#ff00ff33';
             ctx.strokeRect(
-                (agent.x - 2) * scale, 
-                (agent.y - 2) * scale, 
-                4 * scale, 
-                4 * scale
+                (agent.x - 2) * scaleX, 
+                (agent.y - 2) * scaleY, 
+                4 * scaleX, 
+                4 * scaleY
             );
         }
     }
 }
 
 // Render debug information
-function renderDebugInfo(scale) {
+function renderDebugInfo(scaleX, scaleY) {
     // Draw coordinate labels
     ctx.font = '10px monospace';
     ctx.fillStyle = '#666';
     
-    for (let y = 0; y < WORLD_SIZE; y++) {
-        for (let x = 0; x < WORLD_SIZE; x++) {
-            ctx.fillText(`${x},${y}`, x * scale + 2, y * scale + 10);
+    for (let y = 0; y < WORLD_HEIGHT; y++) {
+        for (let x = 0; x < WORLD_WIDTH; x++) {
+            ctx.fillText(`${x},${y}`, x * scaleX + 2, y * scaleY + 10);
         }
     }
 }
@@ -710,8 +828,8 @@ function resetWorld() {
 
 function addRandomAgent() {
     const newAgent = {
-        x: Math.random() * WORLD_SIZE,
-        y: Math.random() * WORLD_SIZE,
+        x: Math.random() * WORLD_WIDTH,
+        y: Math.random() * (GROUND_LEVEL - 1),
         vx: (Math.random() - 0.5) * 2,
         vy: (Math.random() - 0.5) * 2,
         emotion: Math.random() > 0.5 ? 1 : -1,
