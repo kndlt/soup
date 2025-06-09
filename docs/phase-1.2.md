@@ -88,10 +88,11 @@ Implements Pixel's algorithms:
 - **Debug overlay** showing memory events as text
 
 ### Visual Progression Demo
-1. **T=0s**: Gray barren 5x5 grid, 2 agents spawn
-2. **T=10s**: Tiles under joyful agent start turning green
-3. **T=20s**: Growth spreads to neighbors, first "root" tiles appear
-4. **T=30s**: Clear biological patterns visible, possible bridge emergence
+1. **T=0min**: Gray barren 512x512 world, 10-20 agents spawn randomly
+2. **T=1min**: Emotional influence creates colored patches around agent paths
+3. **T=2min**: Growth begins - patches start connecting and spreading
+4. **T=3min**: Distinct biome regions emerge (root networks, canopy areas)
+5. **T=5min**: Bridge pathways connect distant regions, clear forest structure visible
 
 ## 🔧 Technical Implementation
 
