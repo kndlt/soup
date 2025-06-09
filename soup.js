@@ -2,9 +2,9 @@
 // Quick & dirty emergence experiment
 
 // Global configuration
-const WORLD_SIZE = 8;
-const TILE_COUNT = WORLD_SIZE * WORLD_SIZE; // 64 tiles
-const INITIAL_AGENT_COUNT = 3;
+const WORLD_SIZE = 32; // Scaled up from 8x8 to 32x32
+const TILE_COUNT = WORLD_SIZE * WORLD_SIZE; // 1024 tiles
+const INITIAL_AGENT_COUNT = 12; // More agents for larger world
 
 // Global state
 let tiles = [];
@@ -212,16 +212,16 @@ function update(deltaTime) {
 
 // Update agent movement with gravity
 function updateAgents(deltaTime) {
-    const speed = 0.001; // pixels per millisecond (scaled for 8x8)
-    const gravity = 0.0002; // downward acceleration
+    const speed = 0.004; // pixels per millisecond (scaled for 32x32)
+    const gravity = 0.0008; // downward acceleration
     const friction = 0.98; // air resistance
     
     for (let i = 0; i < agents.length; i++) {
         const agent = agents[i];
         
         // Random walk with reduced strength
-        agent.vx += (Math.random() - 0.5) * 0.01;
-        agent.vy += (Math.random() - 0.5) * 0.01;
+        agent.vx += (Math.random() - 0.5) * 0.04;
+        agent.vy += (Math.random() - 0.5) * 0.04;
         
         // Apply gravity
         agent.vy += gravity * deltaTime;
@@ -231,7 +231,7 @@ function updateAgents(deltaTime) {
         agent.vy *= friction;
         
         // Clamp velocity
-        const maxSpeed = 0.5;
+        const maxSpeed = 2.0; // Increased for larger world
         agent.vx = Math.max(-maxSpeed, Math.min(maxSpeed, agent.vx));
         agent.vy = Math.max(-maxSpeed, Math.min(maxSpeed, agent.vy));
         
@@ -252,7 +252,7 @@ function updateAgents(deltaTime) {
             
             // Small chance to jump when on ground
             if (Math.random() < 0.01) {
-                agent.vy = -0.3; // jump force
+                agent.vy = -1.2; // jump force (scaled for larger world)
             }
         }
         
@@ -285,7 +285,7 @@ function updateTileInfluence() {
         const agent = agents[a];
         const agentX = Math.floor(agent.x);
         const agentY = Math.floor(agent.y);
-        const influenceRadius = 2; // Reduced for 8x8 grid
+        const influenceRadius = 3; // Increased for 32x32 grid
         
         // Check tiles in radius (brute force)
         for (let y = agentY - influenceRadius; y <= agentY + influenceRadius; y++) {
@@ -317,7 +317,7 @@ function updateTileInfluence() {
 
 // Update tile growth and spreading
 function updateTileGrowth(currentTime) {
-    const growthInterval = 200; // milliseconds between growth updates
+    const growthInterval = 400; // milliseconds between growth updates (increased for performance)
     
     for (let i = 0; i < tiles.length; i++) {
         const tile = tiles[i];
@@ -370,8 +370,8 @@ function updateTileGrowth(currentTime) {
 
 // Spread influence to neighboring tiles with height-based bias
 function spreadToNeighbors(sourceTile) {
-    const spreadRadius = 2;
-    const spreadAmount = 0.01;
+    const spreadRadius = 1; // Reduced for performance on larger grid
+    const spreadAmount = 0.02; // Increased to compensate for smaller radius
     
     // Height-based growth bias (Phase 2.4 - Pixel's insight)
     const horizontalBias = sourceTile.height_from_ground * 0.1;
@@ -413,7 +413,7 @@ function updateTileLight(tile, tileIndex) {
     tile.light = 1.0;
     
     // Check for canopy above and around
-    const checkRadius = 3;
+    const checkRadius = 2; // Reduced for performance
     for (let dy = -checkRadius; dy <= checkRadius; dy++) {
         for (let dx = -checkRadius; dx <= checkRadius; dx++) {
             const nx = tile.x + dx;
@@ -466,7 +466,7 @@ function updateResourceDiffusion() {
         tiles[i].water = Math.max(0, Math.min(1, tiles[i].water));
         
         // Add small amount of water from "rain" occasionally
-        if (Math.random() < 0.001) {
+        if (Math.random() < 0.0005) { // Reduced frequency for larger grid
             tiles[i].water += 0.1;
             tiles[i].water = Math.min(1, tiles[i].water);
         }
@@ -554,11 +554,11 @@ function updateStatistics() {
 
 // Render the world
 function render() {
-    const SCALE = 32; // Scale factor to make 8x8 grid visible (256/8 = 32)
+    const SCALE = 16; // Scale factor to make 32x32 grid visible (512/32 = 16)
     
     // Clear canvas
     ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, 256, 256);
+    ctx.fillRect(0, 0, 512, 512);
     
     renderTiles(SCALE);
     renderAgents(SCALE);
