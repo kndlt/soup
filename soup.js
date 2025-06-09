@@ -845,8 +845,8 @@ function getTileColor(tile) {
             return `rgb(${soilBase}, ${soilBase * 0.7}, ${soilBase * 0.5})`;
             
         case 'root':
-            // Roots are darker brown
-            return `rgb(${60 + tile.mood * 20}, ${40 + tile.mood * 10}, 20)`;
+            // Roots are lighter brown/tan
+            return `rgb(${120 + tile.mood * 30}, ${100 + tile.mood * 20}, ${70 + tile.mood * 10})`;
             
         case 'trunk':
             // Tree trunk browns
