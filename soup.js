@@ -8,6 +8,13 @@ const TILE_COUNT = WORLD_WIDTH * WORLD_HEIGHT; // 2048 tiles
 const INITIAL_AGENT_COUNT = 12; // More agents for larger world
 const GROUND_LEVEL = 24; // Ground starts at y=24
 
+// Resource consumption rates
+const WATER_CONSUMPTION_RATE = 0.02;
+const NUTRIENT_CONSUMPTION_RATE = 0.01;
+const MATURE_CONSUMPTION_BONUS = 0.01;
+const MIN_WATER_FOR_GROWTH = 0.15;
+const MIN_NUTRIENTS_FOR_GROWTH = 0.1;
+
 // Global state
 let tiles = [];
 let agents = [];
@@ -227,6 +234,7 @@ function updateFPS() {
 function update(deltaTime) {
     updateAgents(deltaTime);
     updateTileInfluence();
+    updateLightLevels(); // Update light before growth
     updateTileGrowth(performance.now());
     updateResourceDiffusion();
     updateFireRisk();
@@ -451,19 +459,32 @@ function updateTileGrowth(currentTime) {
         if (currentTime - tile.lastUpdate > growthInterval) {
             tile.lastUpdate = currentTime;
             
-            // Resource-driven growth conditions (Phase 2.4)
-            const hasWater = tile.water > 0.2;
-            const hasNutrients = tile.nutrients > 0.1;
-            const hasLight = tile.light > 0.1;
-            const hasMood = tile.mood > 0.05;
+            // Resource availability affects growth rate
+            const waterAvailability = Math.max(0, (tile.water - MIN_WATER_FOR_GROWTH) / (1 - MIN_WATER_FOR_GROWTH));
+            const nutrientAvailability = Math.max(0, (tile.nutrients - MIN_NUTRIENTS_FOR_GROWTH) / (1 - MIN_NUTRIENTS_FOR_GROWTH));
+            const lightAvailability = tile.light;
             
-            if (hasWater && hasNutrients && hasLight && hasMood && tile.visits > 0) {
-                // Calculate growth rate based on resources
-                const resourceFactor = Math.min(tile.water, tile.nutrients, tile.light);
-                const growthRate = 0.1 * resourceFactor; // Much faster growth
+            const resourceFactor = Math.min(waterAvailability, nutrientAvailability, lightAvailability);
+            
+            if (resourceFactor > 0 && tile.mood > 0.05 && tile.visits > 0) {
+                const baseGrowthRate = 0.1;
+                const growthRate = baseGrowthRate * resourceFactor;
                 
                 // Update type and height
                 const oldGrowth = tile.growth;
+                
+                // Seedling mortality in poor conditions
+                if (tile.growth < 0.3 && resourceFactor < 0.2) {
+                    tile.growth -= 0.01;
+                    if (tile.growth <= 0) {
+                        // Death and nutrient return
+                        tile.tileType = 'soil';
+                        tile.treeId = null;
+                        tile.nutrients = Math.min(1, tile.nutrients + 0.15);
+                        console.log(`Seedling died at (${tile.x}, ${tile.y}) - poor resources`);
+                        continue;
+                    }
+                }
                 tile.growth = Math.min(tile.growth + growthRate, 2);
                 
                 // Update height as plant grows
@@ -697,18 +718,32 @@ function updateTileGrowth(currentTime) {
                     }
                 }
                 
-                // Consume resources
-                tile.water -= 0.005;
-                tile.nutrients -= 0.003;
+                // Consume resources based on growth activity
+                if (tile.growth > oldGrowth) {
+                    const consumptionMultiplier = tile.growth > 1.0 ? 2.0 : 1.0;
+                    tile.water -= WATER_CONSUMPTION_RATE * growthRate * consumptionMultiplier;
+                    tile.nutrients -= NUTRIENT_CONSUMPTION_RATE * growthRate * consumptionMultiplier;
+                    
+                    // Clamp values
+                    tile.water = Math.max(0, tile.water);
+                    tile.nutrients = Math.max(0, tile.nutrients);
+                }
                 
                 // Spread influence to neighbors
                 if (tile.growth > 0.5 && (tile.tileType === 'trunk' || tile.tileType === 'leaf')) {
                     spreadToNeighbors(tile);
                 }
+            } else if (tile.growth > 0 && tile.growth < 0.3) {
+                // No resources = seedling death
+                tile.growth -= 0.005;
+                if (tile.growth <= 0) {
+                    tile.tileType = 'soil';
+                    tile.treeId = null;
+                    tile.nutrients = Math.min(1, tile.nutrients + 0.1);
+                }
             }
             
-            // Update light based on nearby canopy
-            updateTileLight(tile, i);
+            // Light is now updated globally in updateLightLevels()
             
             // Slow decay if no recent influence
             if (tile.currentInfluence === 0) {
@@ -759,7 +794,44 @@ function spreadToNeighbors(sourceTile) {
     }
 }
 
-// Update light availability based on nearby canopy
+// Simple light propagation from top to bottom
+function updateLightLevels() {
+    // Single downward pass
+    for (let y = 0; y < WORLD_HEIGHT; y++) {
+        for (let x = 0; x < WORLD_WIDTH; x++) {
+            const index = y * WORLD_WIDTH + x;
+            const tile = tiles[index];
+            
+            if (y === 0) {
+                tile.light = 1.0; // Full light at top
+            } else {
+                const aboveIndex = (y - 1) * WORLD_WIDTH + x;
+                const above = tiles[aboveIndex];
+                
+                // Start with light from above
+                tile.light = above.light;
+                
+                // Reduce based on what's above
+                switch(above.tileType) {
+                    case 'leaf':
+                        tile.light *= 0.2; // 80% blocked
+                        break;
+                    case 'branch':
+                        tile.light *= 0.6; // 40% blocked
+                        break;
+                    case 'trunk':
+                        tile.light *= 0.85; // 15% blocked
+                        break;
+                }
+            }
+            
+            // Minimum ambient light
+            tile.light = Math.max(0.05, tile.light);
+        }
+    }
+}
+
+// Update light availability based on nearby canopy (OLD - not used anymore)
 function updateTileLight(tile, tileIndex) {
     // Reset to full light
     tile.light = 1.0;
@@ -791,32 +863,44 @@ function updateTileLight(tile, tileIndex) {
 
 // Water and nutrient diffusion (Phase 2.4)
 function updateResourceDiffusion() {
-    // Create a copy for simultaneous update
+    // Create copies for simultaneous update
     const waterChanges = new Float32Array(TILE_COUNT);
+    const nutrientChanges = new Float32Array(TILE_COUNT);
     
-    // Calculate water flow
+    // Calculate resource flow
     for (let i = 0; i < tiles.length; i++) {
         const tile = tiles[i];
-        const neighbors = getNeighborIndices(tile.x, tile.y);
+        if (tile.tileType !== 'soil' && tile.tileType !== 'root') continue;
         
-        // Calculate average water level of neighbors
-        let totalWater = tile.water;
-        let count = 1;
+        const neighbors = getNeighborIndices(tile.x, tile.y);
+        let waterGradient = 0;
+        let nutrientGradient = 0;
+        let validNeighbors = 0;
         
         for (let ni of neighbors) {
-            totalWater += tiles[ni].water;
-            count++;
+            const neighbor = tiles[ni];
+            if (neighbor.tileType === 'soil' || neighbor.tileType === 'root') {
+                waterGradient += (neighbor.water - tile.water);
+                nutrientGradient += (neighbor.nutrients - tile.nutrients);
+                validNeighbors++;
+            }
         }
         
-        const avgWater = totalWater / count;
-        const flow = (avgWater - tile.water) * 0.1; // 10% flow rate
-        waterChanges[i] = flow;
+        if (validNeighbors > 0) {
+            waterChanges[i] = waterGradient * 0.1 / validNeighbors;
+            nutrientChanges[i] = nutrientGradient * 0.05 / validNeighbors;
+        }
+        
+        // Roots actively uptake water
+        if (tile.tileType === 'root') {
+            waterChanges[i] += 0.02; // Active uptake
+        }
     }
     
-    // Apply water changes
+    // Apply changes
     for (let i = 0; i < tiles.length; i++) {
-        tiles[i].water += waterChanges[i];
-        tiles[i].water = Math.max(0, Math.min(1, tiles[i].water));
+        tiles[i].water = Math.max(0, Math.min(1, tiles[i].water + waterChanges[i]));
+        tiles[i].nutrients = Math.max(0, Math.min(1, tiles[i].nutrients + nutrientChanges[i]));
         
         // Add small amount of water from "rain" occasionally
         if (Math.random() < 0.0005) { // Reduced frequency for larger grid
