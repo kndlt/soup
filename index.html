@@ -3,121 +3,171 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SOUP - Living Forest Prototype</title>
+    <title>Primordial Soup - Emergence Simulation</title>
     <style>
         body {
             margin: 0;
             padding: 20px;
-            background: #111;
-            color: #fff;
-            font-family: 'Courier New', monospace;
+            background-color: #111;
+            color: #eee;
+            font-family: monospace;
             overflow: hidden;
         }
         
         #container {
             display: flex;
             gap: 20px;
+            height: calc(100vh - 40px);
         }
         
-        #canvas {
+        #canvasContainer {
+            position: relative;
+        }
+        
+        #gameCanvas {
             border: 2px solid #333;
-            background: #000;
+            cursor: crosshair;
             image-rendering: pixelated;
             image-rendering: -moz-crisp-edges;
             image-rendering: crisp-edges;
         }
         
-        #info {
-            width: 300px;
-            font-size: 12px;
-            line-height: 1.4;
-        }
-        
-        #info h2 {
-            margin: 0 0 10px 0;
-            font-size: 16px;
-            color: #4f4;
-        }
-        
-        #stats {
-            background: #222;
-            padding: 10px;
-            border-radius: 4px;
-            margin-bottom: 10px;
-        }
-        
         #controls {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            min-width: 300px;
+        }
+        
+        .control-group {
             background: #222;
-            padding: 10px;
-            border-radius: 4px;
-            margin-bottom: 10px;
+            padding: 15px;
+            border-radius: 5px;
+            border: 1px solid #444;
         }
         
-        #controls button {
+        .control-group h3 {
+            margin: 0 0 10px 0;
+            color: #4a9eff;
+        }
+        
+        button {
             background: #333;
+            color: #eee;
             border: 1px solid #555;
-            color: #fff;
-            padding: 5px 10px;
-            margin: 2px;
+            padding: 8px 15px;
             cursor: pointer;
-            font-family: inherit;
-            font-size: 11px;
+            border-radius: 3px;
+            font-family: monospace;
+            transition: all 0.2s;
         }
         
-        #controls button:hover {
+        button:hover {
             background: #444;
+            border-color: #666;
         }
         
-        #log {
-            background: #1a1a1a;
-            padding: 10px;
-            border-radius: 4px;
-            height: 200px;
-            overflow-y: auto;
-            font-size: 10px;
-            color: #aaa;
+        button:active {
+            background: #222;
         }
         
-        .emergence {
-            color: #4f4;
+        .stat {
+            display: flex;
+            justify-content: space-between;
+            margin: 5px 0;
+        }
+        
+        .stat-value {
+            color: #4a9eff;
             font-weight: bold;
         }
         
-        .warning {
-            color: #f84;
+        #debugInfo {
+            font-size: 12px;
+            background: #1a1a1a;
+            padding: 10px;
+            border-radius: 3px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        
+        .slider-container {
+            margin: 10px 0;
+        }
+        
+        .slider-container label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        
+        input[type="range"] {
+            width: 100%;
+        }
+        
+        #fpsCounter {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 5px 10px;
+            border-radius: 3px;
+            font-size: 14px;
+            color: #4a9eff;
         }
     </style>
 </head>
 <body>
     <div id="container">
-        <canvas id="canvas" width="512" height="512"></canvas>
+        <div id="canvasContainer">
+            <canvas id="gameCanvas" width="256" height="256"></canvas>
+            <div id="fpsCounter">FPS: 0</div>
+        </div>
         
-        <div id="info">
-            <h2>🧪 SOUP Prototype</h2>
-            
-            <div id="stats">
-                <div>FPS: <span id="fps">--</span></div>
-                <div>Tiles: <span id="tileCount">--</span></div>
-                <div>Agents: <span id="agentCount">--</span></div>
-                <div>Avg Mood: <span id="avgMood">--</span></div>
-                <div>Mature Tiles: <span id="matureTiles">--</span></div>
+        <div id="controls">
+            <div class="control-group">
+                <h3>Simulation Controls</h3>
+                <button id="pauseBtn">Pause</button>
+                <button id="resetBtn">Reset</button>
+                <button id="stepBtn">Step Frame</button>
             </div>
             
-            <div id="controls">
-                <button onclick="togglePause()">⏸️ Pause</button>
-                <button onclick="resetWorld()">🔄 Reset</button>
-                <button onclick="addRandomAgent()">➕ Add Agent</button>
-                <br>
-                <button onclick="toggleDebug()">🔍 Debug</button>
-                <button onclick="takeScreenshot()">📷 Screenshot</button>
-                <button onclick="exportState()">💾 Export</button>
+            <div class="control-group">
+                <h3>Agent Controls</h3>
+                <button id="addAgentBtn">Add Random Agent</button>
+                <div class="slider-container">
+                    <label for="agentSpeed">Agent Speed: <span id="speedValue">1</span></label>
+                    <input type="range" id="agentSpeed" min="0.1" max="5" step="0.1" value="1">
+                </div>
+                <div class="stat">
+                    <span>Total Agents:</span>
+                    <span class="stat-value" id="agentCount">0</span>
+                </div>
             </div>
             
-            <div id="log">
-                <div class="emergence">🌱 SOUP Forest Emergence Log</div>
-                <div>Initializing 512x512 world...</div>
-                <div>262,144 tiles created</div>
-                <div>Ready for emergence</div>
+            <div class="control-group">
+                <h3>World Stats</h3>
+                <div class="stat">
+                    <span>Active Tiles:</span>
+                    <span class="stat-value" id="activeTiles">0</span>
+                </div>
+                <div class="stat">
+                    <span>Growing Tiles:</span>
+                    <span class="stat-value" id="growingTiles">0</span>
+                </div>
+                <div class="stat">
+                    <span>Mature Tiles:</span>
+                    <span class="stat-value" id="matureTiles">0</span>
+                </div>
+                <div class="stat">
+                    <span>Simulation Time:</span>
+                    <span class="stat-value" id="simTime">0s</span>
+                </div>
+            </div>
+            
+            <div class="control-group">
+                <h3>Debug Info</h3>
+                <button id="toggleDebugBtn">Toggle Debug View</button>
+                <div id="debugInfo"></div>
             </div>
         </div>
     </div>
