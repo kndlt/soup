@@ -66,10 +66,12 @@ class SimpleAgent {
 ```
 
 #### 3. Growth System (growth.js)
-Implements Pixel's algorithms:
-- **Sparse simulation**: Only update "active" tiles
+Implements Pixel's algorithms with performance optimizations:
+- **Sparse simulation**: Only update "active" tiles (near agents, recently changed, or growing)
+- **Chunked processing**: Process tiles in batches (1000-5000 per frame) to avoid blocking
+- **Spatial indexing**: Grid chunks (32x32) for efficient neighbor lookups
 - **Growth rate formula**: `rate = baseRate * (1 - growthStage / maxStage)`
-- **Neighbor influence**: Adjacent tiles affect growth potential
+- **Priority queue**: Most "urgent" tiles processed first
 
 #### 4. Memory System (memory.js)
 - **Event tagging**: "agent_joy", "agent_sorrow", "repeated_visit"
@@ -79,13 +81,15 @@ Implements Pixel's algorithms:
 ## 🎨 Visual Design
 
 ### Rendering Strategy
-- **Canvas 2D** for simplicity (no WebGL complexity)
+- **Canvas 2D with ImageData** for efficient pixel manipulation (512x512 = 262k pixels)
+- **Viewport culling**: Only render visible tiles (camera system)
+- **Level-of-detail**: Simplified rendering when zoomed out
 - **Tile colors** represent biological state:
   - Hue = mood (-1 red → 0 gray → 1 green)
   - Saturation = fertility (0 dull → 1 vibrant)
   - Brightness = growth stage (0 dark → 5 bright)
-- **Agent rendering** as simple colored circles
-- **Debug overlay** showing memory events as text
+- **Agent rendering** as simple colored circles (only if in viewport)
+- **Debug overlay** available but performance-conscious
 
 ### Visual Progression Demo
 1. **T=0min**: Gray barren 512x512 world, 10-20 agents spawn randomly
@@ -109,9 +113,10 @@ Implements Pixel's algorithms:
 4. **Visual debugging**: Click tiles to see memory/mood in console
 
 ### Performance Targets
-- **60fps rendering** on 5x5 grid (trivial)
-- **1-10fps growth ticks** (adjustable for demo speed)
+- **30-60fps rendering** on 512x512 grid with viewport culling
+- **1-5fps growth ticks** for 262k tiles (sparse simulation critical)
 - **Instant parameter changes** (no build step)
+- **Chunked processing** to avoid blocking main thread
 
 ## 📊 Success Metrics
 
