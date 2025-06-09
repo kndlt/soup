@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SOUP - Living Forest Prototype</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background: #111;
+            color: #fff;
+            font-family: 'Courier New', monospace;
+            overflow: hidden;
+        }
+        
+        #container {
+            display: flex;
+            gap: 20px;
+        }
+        
+        #canvas {
+            border: 2px solid #333;
+            background: #000;
+            image-rendering: pixelated;
+            image-rendering: -moz-crisp-edges;
+            image-rendering: crisp-edges;
+        }
+        
+        #info {
+            width: 300px;
+            font-size: 12px;
+            line-height: 1.4;
+        }
+        
+        #info h2 {
+            margin: 0 0 10px 0;
+            font-size: 16px;
+            color: #4f4;
+        }
+        
+        #stats {
+            background: #222;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 10px;
+        }
+        
+        #controls {
+            background: #222;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 10px;
+        }
+        
+        #controls button {
+            background: #333;
+            border: 1px solid #555;
+            color: #fff;
+            padding: 5px 10px;
+            margin: 2px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 11px;
+        }
+        
+        #controls button:hover {
+            background: #444;
+        }
+        
+        #log {
+            background: #1a1a1a;
+            padding: 10px;
+            border-radius: 4px;
+            height: 200px;
+            overflow-y: auto;
+            font-size: 10px;
+            color: #aaa;
+        }
+        
+        .emergence {
+            color: #4f4;
+            font-weight: bold;
+        }
+        
+        .warning {
+            color: #f84;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <canvas id="canvas" width="512" height="512"></canvas>
+        
+        <div id="info">
+            <h2>🧪 SOUP Prototype</h2>
+            
+            <div id="stats">
+                <div>FPS: <span id="fps">--</span></div>
+                <div>Tiles: <span id="tileCount">--</span></div>
+                <div>Agents: <span id="agentCount">--</span></div>
+                <div>Avg Mood: <span id="avgMood">--</span></div>
+                <div>Mature Tiles: <span id="matureTiles">--</span></div>
+            </div>
+            
+            <div id="controls">
+                <button onclick="togglePause()">⏸️ Pause</button>
+                <button onclick="resetWorld()">🔄 Reset</button>
+                <button onclick="addRandomAgent()">➕ Add Agent</button>
+                <br>
+                <button onclick="toggleDebug()">🔍 Debug</button>
+                <button onclick="takeScreenshot()">📷 Screenshot</button>
+                <button onclick="exportState()">💾 Export</button>
+            </div>
+            
+            <div id="log">
+                <div class="emergence">🌱 SOUP Forest Emergence Log</div>
+                <div>Initializing 512x512 world...</div>
+                <div>262,144 tiles created</div>
+                <div>Ready for emergence</div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="soup.js"></script>
+</body>
+</html>
