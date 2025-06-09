@@ -156,6 +156,10 @@ function createTiles() {
                 lastUpdate: 0,            // for growth timing
                 currentInfluence: 0,      // this frame's influence
                 
+                // Tree identity
+                treeId: null,             // Unique identifier for each tree
+                trunkX: null,             // X position of this tree's main trunk
+                
                 // Biological parameters (Phase 2.4)
                 water: y >= GROUND_LEVEL ? 0.3 + Math.random() * 0.3 : 0,  // Moisture in soil
                 nutrients: y >= GROUND_LEVEL ? 0.2 + Math.random() * 0.4 : 0, // Nutrients in soil
@@ -401,9 +405,11 @@ function updateTileInfluence() {
                             if ((currentTile.tileType === 'soil' || currentTile.tileType === 'branch') && 
                                 currentTile.growth < 0.1 && Math.random() < 0.05) {
                                 if (currentTile.tileType === 'soil') {
-                                    // Direct planting
+                                    // Direct planting with unique tree ID
                                     currentTile.growth = 0.1;
-                                    console.log(`🌱 Seed planted at (${x}, ${y})`);
+                                    currentTile.treeId = `tree_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+                                    currentTile.trunkX = x;
+                                    console.log(`🌱 Seed planted at (${x}, ${y}) - Tree ID: ${currentTile.treeId}`);
                                 } else {
                                     // Drop from branch
                                     for (let checkY = y + 1; checkY < WORLD_HEIGHT; checkY++) {
@@ -411,7 +417,9 @@ function updateTileInfluence() {
                                         const groundTile = tiles[groundIndex];
                                         if (groundTile.tileType === 'soil' && groundTile.growth === 0) {
                                             groundTile.growth = 0.1;
-                                            console.log(`🌱 Seed dropped to (${x}, ${checkY})`);
+                                            groundTile.treeId = `tree_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+                                            groundTile.trunkX = x;
+                                            console.log(`🌱 Seed dropped to (${x}, ${checkY}) - Tree ID: ${groundTile.treeId}`);
                                             break;
                                         }
                                     }
@@ -465,6 +473,9 @@ function updateTileGrowth(currentTime) {
                         // This is a seed at surface level - sprout upward
                         const aboveIndex = (tile.y - 1) * WORLD_WIDTH + tile.x;
                         if (tile.y > 0 && tiles[aboveIndex].tileType === 'air') {
+                            // Check if target tile already has a different treeId
+                            if (tiles[aboveIndex].treeId && tiles[aboveIndex].treeId !== tile.treeId) continue;
+                            
                             tiles[aboveIndex].tileType = 'trunk';
                             tiles[aboveIndex].solid = true;
                             tiles[aboveIndex].climbable = true;
@@ -473,7 +484,9 @@ function updateTileGrowth(currentTime) {
                             tiles[aboveIndex].water = tile.water * 0.9;
                             tiles[aboveIndex].nutrients = tile.nutrients * 0.9;
                             tiles[aboveIndex].light = tile.light * 0.95;
-                            tiles[aboveIndex].visits = tile.visits; // Inherit parent's visits
+                            tiles[aboveIndex].visits = tile.visits;
+                            tiles[aboveIndex].treeId = tile.treeId;
+                            tiles[aboveIndex].trunkX = tile.trunkX;
                             
                             // Mark this soil as having a plant
                             tile.tileType = 'root';
@@ -482,9 +495,14 @@ function updateTileGrowth(currentTime) {
                         // Also grow roots downward
                         const belowIndex = (tile.y + 1) * WORLD_WIDTH + tile.x;
                         if (tile.y < WORLD_HEIGHT - 1 && tiles[belowIndex].tileType === 'soil') {
+                            // Check if target tile already has a different treeId
+                            if (tiles[belowIndex].treeId && tiles[belowIndex].treeId !== tile.treeId) continue;
+                            
                             tiles[belowIndex].tileType = 'root';
                             tiles[belowIndex].growth = 0.1;
                             tiles[belowIndex].water = Math.min(1, tiles[belowIndex].water + 0.1);
+                            tiles[belowIndex].treeId = tile.treeId;
+                            tiles[belowIndex].trunkX = tile.trunkX;
                         }
                     } else if (tile.tileType === 'trunk' && tile.growth > 0.3) {
                         // Trunk growing upward
@@ -496,6 +514,9 @@ function updateTileGrowth(currentTime) {
                             const maxHeight = 5 + Math.floor(resourceQuality * 10); // 5-15 tiles based on resources
                             
                             if (heightAboveGround < maxHeight && tile.growth > 0.5) {
+                                // Check if target tile already has a different treeId
+                                if (tiles[aboveIndex].treeId && tiles[aboveIndex].treeId !== tile.treeId) continue;
+                                
                                 // Continue trunk growth
                                 tiles[aboveIndex].tileType = 'trunk';
                                 tiles[aboveIndex].solid = true;
@@ -506,7 +527,12 @@ function updateTileGrowth(currentTime) {
                                 tiles[aboveIndex].nutrients = tile.nutrients * 0.85;
                                 tiles[aboveIndex].light = tile.light * 0.95;
                                 tiles[aboveIndex].visits = Math.max(1, tile.visits);
+                                tiles[aboveIndex].treeId = tile.treeId;
+                                tiles[aboveIndex].trunkX = tile.trunkX;
                             } else if (tile.growth > 1.0 || heightAboveGround >= maxHeight) {
+                                // Check if target tile already has a different treeId
+                                if (tiles[aboveIndex].treeId && tiles[aboveIndex].treeId !== tile.treeId) continue;
+                                
                                 // Top of tree - add leaves
                                 tiles[aboveIndex].tileType = 'leaf';
                                 tiles[aboveIndex].growth = 0.3;
@@ -515,29 +541,44 @@ function updateTileGrowth(currentTime) {
                                 tiles[aboveIndex].light = 1.0; // Leaves get full light at top
                                 tiles[aboveIndex].mood = tile.mood * 0.9;
                                 tiles[aboveIndex].visits = tile.visits;
+                                tiles[aboveIndex].treeId = tile.treeId;
+                                tiles[aboveIndex].trunkX = tile.trunkX;
                                 
                                 // Also add side leaves
                                 const leftIndex = tile.y * WORLD_WIDTH + (tile.x - 1);
                                 const rightIndex = tile.y * WORLD_WIDTH + (tile.x + 1);
                                 if (tile.x > 0 && tiles[leftIndex].tileType === 'air') {
-                                    tiles[leftIndex].tileType = 'leaf';
-                                    tiles[leftIndex].growth = 0.2;
-                                    tiles[leftIndex].water = tile.water * 0.7;
-                                    tiles[leftIndex].nutrients = tile.nutrients * 0.7;
-                                    tiles[leftIndex].light = 0.9;
-                                    tiles[leftIndex].mood = tile.mood * 0.8;
-                                    tiles[leftIndex].visits = tile.visits;
+                                    // Check if target tile already has a different treeId
+                                    if (!(tiles[leftIndex].treeId && tiles[leftIndex].treeId !== tile.treeId)) {
+                                        tiles[leftIndex].tileType = 'leaf';
+                                        tiles[leftIndex].growth = 0.2;
+                                        tiles[leftIndex].water = tile.water * 0.7;
+                                        tiles[leftIndex].nutrients = tile.nutrients * 0.7;
+                                        tiles[leftIndex].light = 0.9;
+                                        tiles[leftIndex].mood = tile.mood * 0.8;
+                                        tiles[leftIndex].visits = tile.visits;
+                                        tiles[leftIndex].treeId = tile.treeId;
+                                        tiles[leftIndex].trunkX = tile.trunkX;
+                                    }
                                 }
                                 if (tile.x < WORLD_WIDTH - 1 && tiles[rightIndex].tileType === 'air') {
-                                    tiles[rightIndex].tileType = 'leaf';
-                                    tiles[rightIndex].growth = 0.2;
-                                    tiles[rightIndex].water = tile.water * 0.7;
-                                    tiles[rightIndex].nutrients = tile.nutrients * 0.7;
-                                    tiles[rightIndex].light = 0.9;
-                                    tiles[rightIndex].mood = tile.mood * 0.8;
-                                    tiles[rightIndex].visits = tile.visits;
+                                    // Check if target tile already has a different treeId
+                                    if (!(tiles[rightIndex].treeId && tiles[rightIndex].treeId !== tile.treeId)) {
+                                        tiles[rightIndex].tileType = 'leaf';
+                                        tiles[rightIndex].growth = 0.2;
+                                        tiles[rightIndex].water = tile.water * 0.7;
+                                        tiles[rightIndex].nutrients = tile.nutrients * 0.7;
+                                        tiles[rightIndex].light = 0.9;
+                                        tiles[rightIndex].mood = tile.mood * 0.8;
+                                        tiles[rightIndex].visits = tile.visits;
+                                        tiles[rightIndex].treeId = tile.treeId;
+                                        tiles[rightIndex].trunkX = tile.trunkX;
+                                    }
                                 }
                             } else {
+                                // Check if target tile already has a different treeId
+                                if (tiles[aboveIndex].treeId && tiles[aboveIndex].treeId !== tile.treeId) continue;
+                                
                                 // Continue trunk growth
                                 tiles[aboveIndex].tileType = 'trunk';
                                 tiles[aboveIndex].solid = true;
@@ -548,6 +589,8 @@ function updateTileGrowth(currentTime) {
                                 tiles[aboveIndex].nutrients = tile.nutrients * 0.85;
                                 tiles[aboveIndex].light = tile.light * 0.95;
                                 tiles[aboveIndex].visits = tile.visits; // Inherit parent's visits
+                                tiles[aboveIndex].treeId = tile.treeId;
+                                tiles[aboveIndex].trunkX = tile.trunkX;
                             }
                         }
                         
@@ -560,6 +603,9 @@ function updateTileGrowth(currentTime) {
                             const branchIndex = tile.y * WORLD_WIDTH + (tile.x + branchSide);
                             if ((branchSide === -1 && tile.x > 0) || (branchSide === 1 && tile.x < WORLD_WIDTH - 1)) {
                                 if (tiles[branchIndex].tileType === 'air') {
+                                    // Check if target tile already has a different treeId
+                                    if (tiles[branchIndex].treeId && tiles[branchIndex].treeId !== tile.treeId) continue;
+                                    
                                     tiles[branchIndex].tileType = 'branch';
                                     tiles[branchIndex].solid = true;
                                     tiles[branchIndex].climbable = true;
@@ -569,6 +615,8 @@ function updateTileGrowth(currentTime) {
                                     tiles[branchIndex].light = tile.light * 0.9;
                                     tiles[branchIndex].mood = tile.mood * 0.8;
                                     tiles[branchIndex].visits = tile.visits;
+                                    tiles[branchIndex].treeId = tile.treeId;
+                                    tiles[branchIndex].trunkX = tile.trunkX;
                                 }
                             }
                         }
@@ -630,12 +678,17 @@ function updateTileGrowth(currentTime) {
                                     const targetTile = tiles[targetIndex];
                                     
                                     if (targetTile.tileType === 'soil') {
+                                        // Check if target tile already has a different treeId
+                                        if (targetTile.treeId && targetTile.treeId !== tile.treeId) continue;
+                                        
                                         targetTile.tileType = 'root';
                                         targetTile.growth = 0.1;
                                         targetTile.mood = tile.mood * 0.8;
                                         targetTile.water = Math.min(1, targetTile.water + 0.1);
                                         targetTile.nutrients = Math.min(1, targetTile.nutrients + 0.05);
                                         targetTile.visits = Math.max(1, tile.visits);
+                                        targetTile.treeId = tile.treeId;
+                                        targetTile.trunkX = tile.trunkX;
                                         break; // Only grow one root per update
                                     }
                                 }
