@@ -572,14 +572,74 @@ function updateTileGrowth(currentTime) {
                                 }
                             }
                         }
-                    } else if (tile.tileType === 'root' && tile.growth > 0.5 && Math.random() < 0.2) {
-                        // Roots growing deeper
-                        const belowIndex = (tile.y + 1) * WORLD_WIDTH + tile.x;
-                        if (tile.y < WORLD_HEIGHT - 1 && tiles[belowIndex].tileType === 'soil') {
-                            tiles[belowIndex].tileType = 'root';
-                            tiles[belowIndex].growth = 0.1;
-                            tiles[belowIndex].water = Math.min(1, tiles[belowIndex].water + 0.05);
-                            tiles[belowIndex].nutrients = Math.min(1, tiles[belowIndex].nutrients + 0.02);
+                    } else if (tile.tileType === 'root' && tile.growth > 0.6) {
+                        // Root growth - controlled spreading
+                        const distanceFromTrunk = Math.abs(tile.x - tile.x); // Will need trunk position
+                        const depthFromSurface = tile.y - GROUND_LEVEL;
+                        
+                        // Reduce growth chance with distance and existing root density
+                        const nearbyRoots = getNeighborIndices(tile.x, tile.y).filter(idx => 
+                            tiles[idx].tileType === 'root'
+                        ).length;
+                        
+                        const rootGrowthChance = 0.1 + (tile.water + tile.nutrients) * 0.05 - nearbyRoots * 0.02;
+                        
+                        if (Math.random() < rootGrowthChance && nearbyRoots < 4) {
+                            // Prioritize downward growth, limit horizontal spread
+                            const neighbors = [
+                                { dx: 0, dy: 1, priority: 1.5 },  // Down (highest priority)
+                                { dx: -1, dy: 1, priority: 0.7 }, // Down-left
+                                { dx: 1, dy: 1, priority: 0.7 },  // Down-right
+                                { dx: -1, dy: 0, priority: 0.3 }, // Left (low priority)
+                                { dx: 1, dy: 0, priority: 0.3 }   // Right (low priority)
+                            ];
+                            
+                            // Only allow horizontal spread in upper layers
+                            if (depthFromSurface > 3) {
+                                // Remove horizontal options deeper underground
+                                neighbors.splice(3, 2);
+                            }
+                            
+                            // Sort by resource availability
+                            neighbors.sort((a, b) => {
+                                const aIndex = (tile.y + a.dy) * WORLD_WIDTH + (tile.x + a.dx);
+                                const bIndex = (tile.y + b.dy) * WORLD_WIDTH + (tile.x + b.dx);
+                                
+                                if (aIndex < 0 || aIndex >= tiles.length) return 1;
+                                if (bIndex < 0 || bIndex >= tiles.length) return -1;
+                                
+                                const aTile = tiles[aIndex];
+                                const bTile = tiles[bIndex];
+                                
+                                if (!aTile || aTile.tileType !== 'soil') return 1;
+                                if (!bTile || bTile.tileType !== 'soil') return -1;
+                                
+                                const aScore = (aTile.water + aTile.nutrients) * a.priority;
+                                const bScore = (bTile.water + bTile.nutrients) * b.priority;
+                                
+                                return bScore - aScore;
+                            });
+                            
+                            // Try to grow into the best neighbor
+                            for (let neighbor of neighbors) {
+                                const newX = tile.x + neighbor.dx;
+                                const newY = tile.y + neighbor.dy;
+                                
+                                if (newX >= 0 && newX < WORLD_WIDTH && newY >= 0 && newY < WORLD_HEIGHT) {
+                                    const targetIndex = newY * WORLD_WIDTH + newX;
+                                    const targetTile = tiles[targetIndex];
+                                    
+                                    if (targetTile.tileType === 'soil') {
+                                        targetTile.tileType = 'root';
+                                        targetTile.growth = 0.1;
+                                        targetTile.mood = tile.mood * 0.8;
+                                        targetTile.water = Math.min(1, targetTile.water + 0.1);
+                                        targetTile.nutrients = Math.min(1, targetTile.nutrients + 0.05);
+                                        targetTile.visits = Math.max(1, tile.visits);
+                                        break; // Only grow one root per update
+                                    }
+                                }
+                            }
                         }
                     }
                 }
