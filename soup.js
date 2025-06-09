@@ -1019,17 +1019,43 @@ function renderTiles(scaleX, scaleY) {
         
         ctx.fillStyle = color;
         ctx.fillRect(tile.x * scaleX, tile.y * scaleY, scaleX, scaleY);
-        
-        // Draw grid lines in debug mode
-        if (debugMode) {
-            ctx.strokeStyle = '#333';
-            ctx.strokeRect(tile.x * scaleX, tile.y * scaleY, scaleX, scaleY);
-        }
     }
 }
 
 // Get color for a tile based on its state
 function getTileColor(tile) {
+    // In debug mode, tint trees by their ID
+    let treeColorModifier = { r: 0, g: 0, b: 0 };
+    if (debugMode && tile.treeId) {
+        // Generate consistent color from tree ID
+        let hash = 0;
+        for (let i = 0; i < tile.treeId.length; i++) {
+            hash = tile.treeId.charCodeAt(i) + ((hash << 5) - hash);
+        }
+        
+        // Create color variations
+        const hue = Math.abs(hash) % 360;
+        const sat = 0.8; // Strong saturation for visibility
+        const light = 0.5; // Stronger tint
+        
+        // Convert HSL to RGB tint
+        const c = (1 - Math.abs(2 * light - 1)) * sat;
+        const x = c * (1 - Math.abs((hue / 60) % 2 - 1));
+        const m = light - c/2;
+        
+        let r = 0, g = 0, b = 0;
+        if (hue < 60) { r = c; g = x; b = 0; }
+        else if (hue < 120) { r = x; g = c; b = 0; }
+        else if (hue < 180) { r = 0; g = c; b = x; }
+        else if (hue < 240) { r = 0; g = x; b = c; }
+        else if (hue < 300) { r = x; g = 0; b = c; }
+        else { r = c; g = 0; b = x; }
+        
+        treeColorModifier.r = Math.floor((r + m) * 255);
+        treeColorModifier.g = Math.floor((g + m) * 255);
+        treeColorModifier.b = Math.floor((b + m) * 255);
+    }
+    
     // Color based on tile type
     switch(tile.tileType) {
         case 'air':
@@ -1043,16 +1069,27 @@ function getTileColor(tile) {
             
         case 'root':
             // Roots are lighter brown/tan
-            return `rgb(${120 + tile.mood * 30}, ${100 + tile.mood * 20}, ${70 + tile.mood * 10})`;
+            const rootR = 120 + tile.mood * 30 + treeColorModifier.r;
+            const rootG = 100 + tile.mood * 20 + treeColorModifier.g;
+            const rootB = 70 + tile.mood * 10 + treeColorModifier.b;
+            return `rgb(${Math.min(255, rootR)}, ${Math.min(255, rootG)}, ${Math.min(255, rootB)})`;
             
         case 'trunk':
             // Tree trunk browns
             const trunkBase = 80 + tile.growth * 40;
+            if (debugMode && tile.treeId) {
+                // In debug mode, use strong tree colors
+                return `rgb(${Math.min(255, trunkBase * 0.5 + treeColorModifier.r)}, ${Math.min(255, trunkBase * 0.5 + treeColorModifier.g)}, ${Math.min(255, trunkBase * 0.5 + treeColorModifier.b)})`;
+            }
             return `rgb(${trunkBase}, ${trunkBase * 0.6}, ${trunkBase * 0.3})`;
             
         case 'branch':
             // Branches slightly lighter than trunk
             const branchBase = 100 + tile.growth * 30;
+            if (debugMode && tile.treeId) {
+                // In debug mode, use strong tree colors
+                return `rgb(${Math.min(255, branchBase * 0.5 + treeColorModifier.r)}, ${Math.min(255, branchBase * 0.5 + treeColorModifier.g)}, ${Math.min(255, branchBase * 0.5 + treeColorModifier.b)})`;
+            }
             return `rgb(${branchBase}, ${branchBase * 0.7}, ${branchBase * 0.4})`;
             
         case 'leaf':
@@ -1060,6 +1097,10 @@ function getTileColor(tile) {
             const resourceHealth = Math.min(tile.water, tile.nutrients, tile.light);
             const greenIntensity = Math.min(255, 100 + tile.mood * 80 + resourceHealth * 75);
             const redComponent = Math.max(0, 30 - tile.growth * 20);
+            if (debugMode && tile.treeId) {
+                // In debug mode, use strong tree colors with green base
+                return `rgb(${Math.min(255, treeColorModifier.r)}, ${Math.min(255, 100 + treeColorModifier.g)}, ${Math.min(255, treeColorModifier.b)})`;
+            }
             return `rgb(${redComponent}, ${greenIntensity}, 20)`;
             
         default:
@@ -1106,15 +1147,8 @@ function renderAgents(scaleX, scaleY) {
 
 // Render debug information
 function renderDebugInfo(scaleX, scaleY) {
-    // Draw coordinate labels
-    ctx.font = '10px monospace';
-    ctx.fillStyle = '#666';
-    
-    for (let y = 0; y < WORLD_HEIGHT; y++) {
-        for (let x = 0; x < WORLD_WIDTH; x++) {
-            ctx.fillText(`${x},${y}`, x * scaleX + 2, y * scaleY + 10);
-        }
-    }
+    // Tree coloring is now handled in getTileColor()
+    // No grid lines or coordinate labels
 }
 
 // Update UI elements
