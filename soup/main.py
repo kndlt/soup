@@ -1,4 +1,5 @@
 import fire
+from .image_gen import generate_noise
 
 
 def hello():
@@ -7,7 +8,10 @@ def hello():
 
 
 def main():
-    fire.Fire(hello)
+    fire.Fire({
+        'hello': hello,
+        'generate-noise': generate_noise,
+    })
 
 
 if __name__ == "__main__":
