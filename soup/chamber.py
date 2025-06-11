@@ -35,10 +35,9 @@ class Chamber:
     def __str__(self):
         return f"Chamber t={self.tick}\n{self.to_ascii()}"
     def forward(self):
-        """Perform a simulation step."""
-        # To apply gravity, we will computer the density of each tile
-        # and then migrate materials to adjacent tile based on their density.
-        density = self.tiles.sum(dim=0)
-        # Implement the logic for migration based on density here
-        
+        with torch.no_grad():  
+            # TODO: Implement...
+            tiles = self.tiles.clone()
+            self.tick += 1
+    
         
