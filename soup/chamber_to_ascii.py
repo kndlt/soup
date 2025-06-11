@@ -2,13 +2,17 @@ import torch
 from colorama import Back, Style
 
 def chamber_to_ascii(chamber):
-    total_density = torch.mean(chamber.tiles, dim=0)
+    total_density = torch.sum(chamber.tiles, dim=0)
     dominant = torch.argmax(chamber.tiles, dim=0)
-    threshold = 0.2
+    threshold = 0.5
     below_threshold = total_density < threshold
     scaleX = 2
     chars = [' ', ' ', ' ']  # AIR, WATER, SOIL
-    bg_colors = [Back.CYAN, Back.BLUE, Back.YELLOW]
+    bg_colors = [
+        Back.LIGHTCYAN_EX, 
+        Back.LIGHTBLUE_EX, 
+        Back.LIGHTYELLOW_EX
+    ]
     result_lines = []
     for row in range(chamber.height):
         line = ""
