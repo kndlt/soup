@@ -1,6 +1,7 @@
 import torch
-from soup.utils import shift_2d_tensor
+from soup.utils import ai_generated, shift_2d_tensor
 
+@ai_generated
 def test_shift_down():
     """Test shifting down (positive dy)"""
     tensor = torch.tensor([
@@ -14,6 +15,7 @@ def test_shift_down():
     ])
     assert torch.equal(result, expected), f"Expected {expected}, got {result}"
 
+@ai_generated
 def test_shift_up():
     """Test shifting up (negative dy)"""
     tensor = torch.tensor([
@@ -27,6 +29,7 @@ def test_shift_up():
     ])
     assert torch.equal(result, expected), f"Expected {expected}, got {result}"
 
+@ai_generated
 def test_shift_right():
     """Test shifting right (positive dx)"""
     tensor = torch.tensor([
@@ -40,6 +43,7 @@ def test_shift_right():
     ])
     assert torch.equal(result, expected), f"Expected {expected}, got {result}"
 
+@ai_generated
 def test_shift_left():
     """Test shifting left (negative dx)"""
     tensor = torch.tensor([
@@ -53,6 +57,7 @@ def test_shift_left():
     ])
     assert torch.equal(result, expected), f"Expected {expected}, got {result}"
 
+@ai_generated
 def test_no_shift():
     """Test no shift returns same tensor"""
     tensor = torch.tensor([
@@ -62,6 +67,7 @@ def test_no_shift():
     result = shift_2d_tensor(tensor, dy=0, dx=0)
     assert torch.equal(result, tensor), f"Expected {tensor}, got {result}"
 
+@ai_generated
 def test_shift_off_edge():
     """Test shifting completely off edge returns zeros"""
     tensor = torch.tensor([

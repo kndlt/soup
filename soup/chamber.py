@@ -1,13 +1,16 @@
 import torch
 
 from .utils import shift_2d_tensor
-from .types import SOIL
+from .types import SOIL, N_CHANNELS
 
 class Chamber:
-    def __init__(self, width=3, height=3, device="cpu"):
+    def __init__(self, width=3, height=3, tiles=None, device=None):
         self.width, self.height = width, height
-        self.tiles = torch.zeros(15, height, width, device=device)
-        self.tiles[SOIL, 0, width // 2] = 1.0  # drop of a soil
+        if tiles is None:
+            self.tiles = torch.zeros(N_CHANNELS, height, width, device=device)
+            self.tiles[SOIL, 0, width // 2] = 1.0  # drop of a soil
+        else:
+            self.tiles = tiles
     @torch.no_grad()
     def step(self):
         soil = self.tiles[SOIL]
