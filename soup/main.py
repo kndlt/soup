@@ -1,8 +1,12 @@
-import fire
-import colorama
+from .utils import chamber_to_ascii
 from .chamber import Chamber
 
-colorama.init()
-
 def main():
-    fire.Fire(Chamber)
+    tick = 0
+    chamber = Chamber()
+    while True:
+        print(f"Tick {tick}-------------")
+        print(chamber_to_ascii(chamber))
+        input("-------------------")
+        chamber.step()
+        tick += 1
