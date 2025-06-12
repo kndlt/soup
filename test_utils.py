@@ -1,5 +1,5 @@
 import torch
-from soup.utils import ai_generated, shift_2d_tensor
+from soup.utils import ai_generated, shift_2d_tensor, sum_2d_below
 
 @ai_generated
 def test_shift_down():
@@ -78,6 +78,26 @@ def test_shift_off_edge():
     expected = torch.zeros_like(tensor)
     assert torch.equal(result, expected), f"Expected {expected}, got {result}"
 
+@ai_generated
+def test_sum_2d_below_example1():
+    """Test the first example from the docstring."""
+    input_tensor = torch.tensor([[1.0, 1.0, 1.0],
+                                [1.0, 1.0, 1.0]])
+    expected = torch.tensor([[2.0, 3.0, 2.0],
+                            [0.0, 0.0, 0.0]])
+    result = sum_2d_below(input_tensor)
+    assert torch.allclose(result, expected)
+
+@ai_generated
+def test_sum_2d_below_example2():
+    """Test the second example from the docstring."""
+    input_tensor = torch.tensor([[1.0, 1.0, 1.0],
+                                [1.0, 0.0, 1.0]])
+    expected = torch.tensor([[1.0, 2.0, 1.0],
+                            [0.0, 0.0, 0.0]])
+    result = sum_2d_below(input_tensor)
+    assert torch.allclose(result, expected)
+
 if __name__ == "__main__":
     test_shift_down()
     test_shift_up()
@@ -85,4 +105,6 @@ if __name__ == "__main__":
     test_shift_left()
     test_no_shift()
     test_shift_off_edge()
+    test_sum_2d_below_example1()
+    test_sum_2d_below_example2()
     print("All tests passed! 🎉")

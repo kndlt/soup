@@ -1,7 +1,7 @@
 import torch
 import colorama
 from colorama import Back, Style
-from .types import SOIL
+from .constants import SOIL
 
 colorama.init()
 
@@ -34,4 +34,27 @@ def shift_2d_tensor(tensor, dy=0, dx=0):
     kernel_4d = kernel.unsqueeze(0).unsqueeze(0)  # [1, 1, K, K]
     padding = kernel_size // 2
     result = torch.nn.functional.conv2d(tensor_4d, kernel_4d, padding=padding)
+    return result.squeeze(0).squeeze(0)  # Back to [H, W]
+
+@ai_generated
+def sum_2d_below(tensor):
+    """
+    Return sum of the tensor elements below the current element.
+    ex1: [[1.0, 1.0, 1.0],     [[2.0, 3.0, 2.0],
+          [1.0, 1.0, 1.0]] ->   [0.0, 0.0, 0.0]]
+    ex2: [[1.0, 1.0, 1.0],     [[1.0, 2.0, 1.0],
+          [1.0, 0.0, 1.0]] ->   [0.0, 0.0, 0.0]]
+    Implemented using convolution
+    """
+    # Create kernel for summing down-left, down, down-right
+    kernel = torch.tensor([[0.0, 0.0, 0.0],
+                          [0.0, 0.0, 0.0], 
+                          [1.0, 1.0, 1.0]], dtype=tensor.dtype, device=tensor.device)
+    
+    # Convert to 4D for conv2d
+    tensor_4d = tensor.unsqueeze(0).unsqueeze(0)  # [1, 1, H, W]
+    kernel_4d = kernel.unsqueeze(0).unsqueeze(0)  # [1, 1, 3, 3]
+    
+    # Apply convolution with padding=1 to maintain size
+    result = torch.nn.functional.conv2d(tensor_4d, kernel_4d, padding=1)
     return result.squeeze(0).squeeze(0)  # Back to [H, W]
