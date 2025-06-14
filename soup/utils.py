@@ -24,9 +24,9 @@ def chamber_to_ascii(chamber):
 
 def tile_to_ascii(tile):
     bg = ""
-    if tile[SOIL] > 0.5:
+    if tile[SOIL] > 0.1:
         bg = Back.YELLOW
-    elif tile[WATER] > 0.5:
+    elif tile[WATER] > 0.1:
         bg = Back.BLUE
     return bg + "  " + Style.RESET_ALL
 

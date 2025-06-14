@@ -10,7 +10,7 @@ def main():
         if tick < chamber.width * 2:
             chamber.tiles[SOIL][0][tick % chamber.width] = 1.0
         elif tick < chamber.width * 4:
-            chamber.tiles[WATER][0][tick % chamber.width] = 1.0
+            chamber.tiles[WATER][0][tick % chamber.width] = 0.125
         print(f"Tick {tick}------------")
         print(chamber_to_ascii(chamber))
         input("-------------------")
