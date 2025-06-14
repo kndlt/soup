@@ -360,3 +360,11 @@ def shift(tensor, dy=0, dx=0):
     H, W = self.height, self.width
     return tensor[max(-dy,0):H+max(-dy,0), max(-dx,0):W+max(-dx,0)]
 ```
+
+## Next Steps
+
+I'm stuck. I we may need to go back to original Machi implementation, and just simulate things manually without using tensors.
+
+Anyways, the goal is to simulate giant trees. We need to get started on the seeds.
+
+Onr

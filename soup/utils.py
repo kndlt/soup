@@ -1,7 +1,7 @@
 import torch
 import colorama
 from colorama import Back, Style
-from .constants import SOIL
+from .constants import SOIL, WATER
 
 colorama.init()
 
@@ -12,12 +12,23 @@ def ai_generated(func):
 
 @ai_generated
 def chamber_to_ascii(chamber):
-    is_soil = chamber.tiles[SOIL]
-    return '\n'.join(
-        ''.join(
-            Back.YELLOW + "  " + Style.RESET_ALL if is_soil[y, x] else "  " for x in range(is_soil.shape[1]))
-        for y in range(is_soil.shape[0])
-    )
+    tiles = chamber.tiles # shape CxHxW
+    rows = []
+    for y in range(chamber.height):
+        row = ""
+        for x in range(chamber.width):
+            tile = tiles[:, y, x]
+            row += tile_to_ascii(tile)
+        rows.append(row)
+    return "\n".join(row for row in rows)
+
+def tile_to_ascii(tile):
+    bg = ""
+    if tile[SOIL] > 0.5:
+        bg = Back.YELLOW
+    elif tile[WATER] > 0.5:
+        bg = Back.BLUE
+    return bg + "  " + Style.RESET_ALL
 
 @ai_generated
 def shift_2d_tensor(tensor, dy=0, dx=0):

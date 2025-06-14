@@ -1,4 +1,4 @@
-from soup.constants import SOIL
+from soup.constants import SOIL, WATER
 from .utils import chamber_to_ascii
 from .chamber import Chamber
 
@@ -9,6 +9,8 @@ def main():
         # Sprinkle Soil
         if tick < chamber.width * 2:
             chamber.tiles[SOIL][0][tick % chamber.width] = 1.0
+        elif tick < chamber.width * 4:
+            chamber.tiles[WATER][0][tick % chamber.width] = 1.0
         print(f"Tick {tick}------------")
         print(chamber_to_ascii(chamber))
         input("-------------------")
