@@ -366,5 +366,3 @@ def shift(tensor, dy=0, dx=0):
 I'm stuck. I we may need to go back to original Machi implementation, and just simulate things manually without using tensors.
 
 Anyways, the goal is to simulate giant trees. We need to get started on the seeds.
-
-Onr
