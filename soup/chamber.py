@@ -1,7 +1,7 @@
 import torch
 
 from .utils import shift_2d_tensor, sum_2d_below
-from .constants import EPSILON, HAS_SEED, HEAT, LIGHT, SEED, SOIL, N_CHANNELS, TREE, WATER, MOISTURE
+from .constants import EPSILON, HEAT, LIGHT, ROOT, SEED, SHOOT, SOIL, N_CHANNELS, TREE, WATER, MOISTURE
 
 class Chamber:
     def __init__(self, width, height, tiles=None, device=None):
@@ -23,6 +23,7 @@ class Chamber:
         self.simulate_light()       # Light comes down and heats things up
         self.simulate_heat()        # Heat disperses
         self.simulate_seed()        # Seed physics
+        self.simulate_tree()        # Tree growth
     def simulate_soil(self):
         """Soil falls"""
         soil = self.tiles[SOIL]
@@ -75,15 +76,18 @@ class Chamber:
         # Kernel [[1/9 1/9 1/9] [1/9 1/9 1/9] [1/9 1/9 1/9]] > 1.0 - EPSILON
         seed = self.tiles[SEED]
         soil = self.tiles[SOIL]
+        tree = self.tiles[TREE]
         kernel = torch.ones((1, 1, 3, 3), device=seed.device) / 9.0
         surrounded = torch.nn.functional.conv2d(soil.unsqueeze(0).unsqueeze(0), kernel, padding=1).squeeze() > 1.0 - EPSILON
         can_fall = (seed > 0.0) & (~surrounded.bool())
         old_seed_locations = can_fall.float() * seed
         new_seed_locations = shift_2d_tensor(old_seed_locations, dy=+1)
         seed = seed - old_seed_locations + new_seed_locations
+        seed_can_hatch = surrounded * seed # more conditions needed (like seeping moisture)
+        seed_to_remove = seed_can_hatch
+        seed = seed - seed_to_remove.float()
+        tree = tree + (seed_to_remove * (ROOT | SHOOT)).float()
         self.tiles[SEED] = seed
-
-
-
-
-
+        self.tiles[TREE] = tree
+    def simulate_tree(self):
+        pass
