@@ -13,9 +13,8 @@ SEED                 = 18         # Seed
 N_CHANNELS           = 19         # Number of channels
 
 # Tree Bits (up to 24 bits should retain precision in float32)
-HAS_SEED = 1<<0
-HAS_ROOT = 1<<1
-HAS_SHOOT = 1<<2
+ROOT = 1<<1
+SHOOT = 1<<2
 HAS_NODE = 1<<3
 HAS_OUTER_WOOD = 1<<4
 HAS_HEART_WOOF = 1<<5
