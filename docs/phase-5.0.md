@@ -85,3 +85,4 @@ Nodes that are more mature won't have this elongation.
 ## What does all this mean for the current Phase 5.0.
 
 I think the first MVP is to have the seed become a shoot and root that just grows upwards and downwards each iteration.
+

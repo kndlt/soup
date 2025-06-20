@@ -1,14 +1,15 @@
+from random import random
+import random as pyrandom
 import torch
 
 from .utils import shift_2d_tensor, sum_2d_below
-from .constants import EPSILON, HEAT, LIGHT, ROOT, SEED, SHOOT, SOIL, N_CHANNELS, TREE, WATER, MOISTURE
+from .constants import EPSILON, HEAT, LIGHT, ROOT, SEED, SOIL, N_CHANNELS, WATER, MOISTURE
 
 class Chamber:
     def __init__(self, width, height, tiles=None, device=None):
         self.width, self.height = width, height
         if tiles is None:
             self.tiles = torch.zeros(N_CHANNELS, height, width, device=device)
-            # self.tiles[SOIL, 0, width // 2] = 1.0  # drop of a soil
         else:
             assert tiles.shape == (N_CHANNELS, height, width)
             self.tiles = tiles
@@ -23,7 +24,7 @@ class Chamber:
         self.simulate_light()       # Light comes down and heats things up
         self.simulate_heat()        # Heat disperses
         self.simulate_seed()        # Seed physics
-        self.simulate_tree()        # Tree growth
+        self.simulate_root()        # Tree growth
     def simulate_soil(self):
         """Soil falls"""
         soil = self.tiles[SOIL]
@@ -76,7 +77,7 @@ class Chamber:
         # Kernel [[1/9 1/9 1/9] [1/9 1/9 1/9] [1/9 1/9 1/9]] > 1.0 - EPSILON
         seed = self.tiles[SEED]
         soil = self.tiles[SOIL]
-        tree = self.tiles[TREE]
+        root = self.tiles[ROOT]
         kernel = torch.ones((1, 1, 3, 3), device=seed.device) / 9.0
         surrounded = torch.nn.functional.conv2d(soil.unsqueeze(0).unsqueeze(0), kernel, padding=1).squeeze() > 1.0 - EPSILON
         can_fall = (seed > 0.0) & (~surrounded.bool())
@@ -86,8 +87,39 @@ class Chamber:
         seed_can_hatch = surrounded * seed # more conditions needed (like seeping moisture)
         seed_to_remove = seed_can_hatch
         seed = seed - seed_to_remove.float()
-        tree = tree + (seed_to_remove * (ROOT | SHOOT)).float()
+        root = root + seed_to_remove.float()
         self.tiles[SEED] = seed
-        self.tiles[TREE] = tree
-    def simulate_tree(self):
-        pass
+        self.tiles[ROOT] = root
+    def simulate_root(self):
+        NEIGHBOUR_DELTAS = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+        root_layer = self.tiles[ROOT]
+        soil_layer = self.tiles[SOIL]
+        tips = (root_layer > 0).nonzero(as_tuple=False)
+        for y, x in tips.tolist():
+            dirs = [(1, 0), (0, -1), (0, 1), (-1, 0)]  # growth options
+            pyrandom.shuffle(dirs)
+            grew = False
+            for dy, dx in dirs:
+                ny, nx = y + dy, x + dx
+                if not (0 <= ny < self.height and 0 <= nx < self.width):
+                    continue
+                # 1️⃣ must be soil and empty
+                if not (soil_layer[ny, nx] > 0 and root_layer[ny, nx].abs() < 1e-6):
+                    continue
+                # 2️⃣ no neighbouring roots other than the parent tip itself
+                clash = False
+                for ndy, ndx in NEIGHBOUR_DELTAS:
+                    ay, ax = ny + ndy, nx + ndx
+                    if (ay, ax) == (y, x):        # parent tip is OK
+                        continue
+                    if 0 <= ay < self.height and 0 <= ax < self.width:
+                        if root_layer[ay, ax].abs() >= 1e-6:  # any root here?
+                            clash = True
+                            break
+                if clash:
+                    continue
+                root_layer[ny, nx] = 1.0
+                grew = True
+                break
+            if grew and random() < 0.9:
+                root_layer[y, x] = -1.0

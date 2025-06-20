@@ -1,7 +1,7 @@
 import torch
 import colorama
 from colorama import Back, Style
-from .constants import SEED, SOIL, TREE, WATER
+from .constants import SEED, SOIL, ROOT, WATER
 
 colorama.init()
 
@@ -26,8 +26,10 @@ def tile_to_ascii(tile):
     bg = ""
     if tile[SEED] >= 0.1:
         bg = Back.RED
-    elif tile[TREE] >= 0.1:
-        bg = Back.GREEN
+    elif tile[ROOT] >= 0.1:
+        bg = Back.LIGHTWHITE_EX
+    elif tile[ROOT] <= -0.1:
+        bg = Back.LIGHTYELLOW_EX
     elif tile[SOIL] >= 0.1:
         bg = Back.YELLOW
     elif tile[WATER] >= 0.1:
